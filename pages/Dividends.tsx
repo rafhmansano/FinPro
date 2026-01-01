@@ -41,6 +41,88 @@ const DIVIDEND_GOALS: Record<number, { yearly: number; monthly: number }> = {
   2045: { yearly: 202522.91, monthly: 16876.91 },
 };
 
+// Nomes dos meses em português
+const MONTH_NAMES = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+const MONTH_NAMES_FULL = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+
+// Função para formatar data no formato "MMM/AAAA" (ex: Jan/2025)
+const formatMonthYear = (dateStr: string): string => {
+  if (!dateStr) return '-';
+  
+  // Se já está no formato YYYY-MM, converte direto
+  if (/^\d{4}-\d{2}$/.test(dateStr)) {
+    const [year, month] = dateStr.split('-');
+    const monthIdx = parseInt(month) - 1;
+    return `${MONTH_NAMES[monthIdx]}/${year}`;
+  }
+  
+  // Se está no formato YYYY-MM-DD, extrai mês e ano
+  if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+    const [year, month] = dateStr.split('-');
+    const monthIdx = parseInt(month) - 1;
+    return `${MONTH_NAMES[monthIdx]}/${year}`;
+  }
+  
+  // Fallback: tenta criar Date
+  try {
+    const date = new Date(dateStr);
+    if (!isNaN(date.getTime())) {
+      return `${MONTH_NAMES[date.getMonth()]}/${date.getFullYear()}`;
+    }
+  } catch {
+    // ignore
+  }
+  
+  return dateStr;
+};
+
+// Função para converter mês/ano para formato do banco (YYYY-MM-01)
+const monthYearToDbFormat = (month: string, year: string): string => {
+  return `${year}-${month.padStart(2, '0')}-01`;
+};
+
+// Componente de seletor de Mês/Ano
+const MonthYearPicker: React.FC<{
+  label: string;
+  month: string;
+  year: string;
+  onMonthChange: (month: string) => void;
+  onYearChange: (year: string) => void;
+}> = ({ label, month, year, onMonthChange, onYearChange }) => {
+  const currentYear = new Date().getFullYear();
+  const years = Array.from({ length: 20 }, (_, i) => currentYear - 10 + i);
+  
+  return (
+    <div className="mb-4">
+      <label className="block text-xs font-semibold text-slate-400 mb-2 uppercase tracking-wider">{label}</label>
+      <div className="grid grid-cols-2 gap-3">
+        <select
+          value={month}
+          onChange={(e) => onMonthChange(e.target.value)}
+          className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 transition-all"
+        >
+          {MONTH_NAMES_FULL.map((name, idx) => (
+            <option key={idx} value={String(idx + 1).padStart(2, '0')}>
+              {name}
+            </option>
+          ))}
+        </select>
+        <select
+          value={year}
+          onChange={(e) => onYearChange(e.target.value)}
+          className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 transition-all"
+        >
+          {years.map((y) => (
+            <option key={y} value={String(y)}>
+              {y}
+            </option>
+          ))}
+        </select>
+      </div>
+    </div>
+  );
+};
+
 export const Dividends = () => {
   const { dividends, addDividend, deleteItem, assets, bulkInsert } = useFinance();
   const [isOpen, setIsOpen] = useState(false);
@@ -49,6 +131,11 @@ export const Dividends = () => {
   const [filterYear, setFilterYear] = useState<string>('ALL');
   const [viewMode, setViewMode] = useState<ViewMode>('TABLE');
   const [searchTicker, setSearchTicker] = useState('');
+  
+  // Estados para o formulário de mês/ano
+  const currentDate = new Date();
+  const [formMonth, setFormMonth] = useState(String(currentDate.getMonth() + 1).padStart(2, '0'));
+  const [formYear, setFormYear] = useState(String(currentDate.getFullYear()));
   
   // Estados para ordenação
   const [sortField, setSortField] = useState<SortField>('paymentDate');
@@ -71,20 +158,16 @@ export const Dividends = () => {
     if (etfs.includes(normalizedTicker)) return 'ETF';
     
     // Lista COMPLETA de Units de ações conhecidas (terminam em 11 mas NÃO são FIIs)
-    // Units são compostas por ações ON + PN, por isso terminam em 11
     const units = [
-      // Energia/Utilidades
       'TAEE11', 'SAPR11', 'ALUP11', 'ENGI11', 'RNEW11', 'TIET11', 'AESB11', 'CMIG11', 'ELET11', 'CPLE11',
-      // Bancos e Financeiras
       'SANB11', 'BPAC11', 'SULA11', 'KLBN11', 'BIDI11', 'BMGB11',
-      // Outros
       'UNIT11'
     ];
     if (units.includes(normalizedTicker)) {
       return 'ACAO';
     }
     
-    // FIIs conhecidos (lista expandida)
+    // FIIs conhecidos
     const knownFIIs = [
       'HGLG11', 'BCFF11', 'IRDM11', 'ALZR11', 'KNCR11', 'XPML11', 
       'HGCR11', 'CPTS11', 'VGIR11', 'KNSC11', 'MXRF11', 'XPLG11',
@@ -93,7 +176,7 @@ export const Dividends = () => {
     ];
     if (knownFIIs.includes(normalizedTicker)) return 'FII';
     
-    // Verifica se o ativo está cadastrado na carteira (tem prioridade sobre o fallback)
+    // Verifica se o ativo está cadastrado na carteira
     const asset = assets.find(a => a.ticker.toUpperCase() === normalizedTicker);
     if (asset) {
       if (asset.type === 'FII') return 'FII';
@@ -101,8 +184,7 @@ export const Dividends = () => {
       return 'ACAO';
     }
     
-    // Fallback: se termina em 11 com 6 caracteres E não é unit conhecida, assume FII
-    // Mas este é o ÚLTIMO recurso
+    // Fallback: se termina em 11 com 6 caracteres, assume FII
     if (normalizedTicker.endsWith('11') && normalizedTicker.length === 6) {
       return 'FII';
     }
@@ -112,24 +194,29 @@ export const Dividends = () => {
 
   // Dividendos com tipo identificado e normalização de campos
   const dividendsWithType = useMemo(() => {
-    // Remove duplicatas por ID
     const uniqueDividends = dividends.filter((d, index, self) =>
       index === self.findIndex(t => t.id === d.id)
     );
     
     return uniqueDividends
       .filter(d => {
-        // Aceita tanto snake_case quanto camelCase
         const paymentDate = d.payment_date || d.paymentDate;
         const ticker = d.ticker;
         const totalValue = d.total_value || d.totalValue;
         return paymentDate && ticker && totalValue;
       })
       .map(d => {
-        // Normaliza todos os campos
         const paymentDate = d.payment_date || d.paymentDate || '';
         const totalValue = Number(d.total_value || d.totalValue || 0);
         const type = d.type || 'DIVIDENDO';
+        
+        // Extrai ano e mês da data
+        let year = '';
+        let month = '';
+        
+        if (/^\d{4}-\d{2}/.test(paymentDate)) {
+          [year, month] = paymentDate.split('-');
+        }
         
         return {
           id: d.id,
@@ -137,10 +224,9 @@ export const Dividends = () => {
           type: type,
           paymentDate: paymentDate,
           totalValue: totalValue,
-          // Campos calculados
           assetType: getAssetType(d.ticker),
-          year: paymentDate.substring(0, 4),
-          month: paymentDate.substring(5, 7)
+          year: year,
+          month: month
         };
       });
   }, [dividends, assets]);
@@ -154,7 +240,6 @@ export const Dividends = () => {
       return true;
     });
     
-    // Ordenação
     return filtered.sort((a, b) => {
       let aVal: any, bVal: any;
       
@@ -207,11 +292,11 @@ export const Dividends = () => {
 
   // Anos disponíveis
   const availableYears = useMemo(() => {
-    const years = [...new Set(dividendsWithType.map(d => d.year))].sort().reverse();
+    const years = [...new Set(dividendsWithType.map(d => d.year))].filter(y => y).sort().reverse();
     return years;
   }, [dividendsWithType]);
 
-  // Totalizadores (usando filteredAndSortedDividends)
+  // Totalizadores
   const totals = useMemo(() => {
     const byType: Record<string, number> = { ACAO: 0, FII: 0, ETF: 0 };
     const byYear: Record<string, number> = {};
@@ -231,32 +316,27 @@ export const Dividends = () => {
 
   // Dados para gráficos
   const chartData = useMemo(() => {
-    // Mensal (últimos 12 meses)
     const monthlyData = Object.entries(totals.byMonth)
       .sort((a, b) => a[0].localeCompare(b[0]))
       .slice(-12)
       .map(([key, value]) => {
         const [year, month] = key.split('-');
-        const monthNames = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
         return {
-          name: `${monthNames[parseInt(month) - 1]}/${year.slice(2)}`,
+          name: `${MONTH_NAMES[parseInt(month) - 1]}/${year.slice(2)}`,
           value
         };
       });
 
-    // Anual
     const yearlyData = Object.entries(totals.byYear)
       .sort((a, b) => a[0].localeCompare(b[0]))
       .map(([year, value]) => ({ year, value }));
 
-    // Por tipo
     const typeData = [
       { name: 'Ações', value: totals.byType.ACAO, color: '#3b82f6' },
       { name: 'FIIs', value: totals.byType.FII, color: '#f59e0b' },
       { name: 'ETFs', value: totals.byType.ETF, color: '#8b5cf6' }
     ].filter(t => t.value > 0);
 
-    // Por ativo (top 10)
     const assetData = Object.entries(totals.byAsset)
       .sort((a, b) => b[1] - a[1])
       .slice(0, 10)
@@ -272,7 +352,6 @@ export const Dividends = () => {
     const formData = new FormData(e.currentTarget);
     const data = Object.fromEntries(formData.entries());
     
-    // Normaliza o tipo para valores aceitos pelo banco
     const typeMap: Record<string, string> = {
       'DIVIDENDO': 'DIVIDENDO',
       'JCP': 'JCP',
@@ -281,17 +360,18 @@ export const Dividends = () => {
     
     const normalizedType = typeMap[String(data.type).toUpperCase()] || 'DIVIDENDO';
     
+    // Usa o mês/ano do estado em vez de um campo de data completo
+    const paymentDate = monthYearToDbFormat(formMonth, formYear);
+    
     const dividendData = {
       ticker: String(data.ticker).toUpperCase(),
-      payment_date: data.paymentDate,
+      payment_date: paymentDate,
       total_value: Number(data.totalValue),
       type: normalizedType
     };
     
     if (editingDividend) {
-      // Atualizar (requer função updateItem no context)
       console.log('Atualizar:', editingDividend.id, dividendData);
-      // TODO: Implementar updateItem para dividendos
     } else {
       await addDividend(dividendData as any);
     }
@@ -302,14 +382,28 @@ export const Dividends = () => {
 
   const handleEdit = (dividend: any) => {
     setEditingDividend(dividend);
+    
+    // Preenche os campos de mês/ano com os valores do dividendo
+    if (dividend.paymentDate) {
+      const [year, month] = dividend.paymentDate.split('-');
+      setFormMonth(month);
+      setFormYear(year);
+    }
+    
     setIsOpen(true);
   };
 
-  // Parser de CSV inteligente que:
-  // 1. Respeita aspas
-  // 2. Detecta e corrige valores decimais BR quebrados (11,7 vira 11.7)
+  const handleOpenNew = () => {
+    setEditingDividend(null);
+    // Reset para o mês/ano atual
+    const now = new Date();
+    setFormMonth(String(now.getMonth() + 1).padStart(2, '0'));
+    setFormYear(String(now.getFullYear()));
+    setIsOpen(true);
+  };
+
+  // Parser de CSV
   const parseCSVLine = (line: string, expectedColumns: number, separator: string = ','): string[] => {
-    // Primeiro tenta parse simples respeitando aspas
     const result: string[] = [];
     let current = '';
     let inQuotes = false;
@@ -328,13 +422,7 @@ export const Dividends = () => {
     }
     result.push(current.trim().replace(/^["']|["']$/g, ''));
     
-    // Se temos mais colunas que o esperado, provavelmente um número decimal foi quebrado
-    // Ex: ["HGLG11", "15/12/2019", "11", "7", "Dividendo", "FII"] quando esperamos 5 colunas
     if (expectedColumns > 0 && result.length > expectedColumns) {
-      console.log(`[CSV] Linha com ${result.length} colunas (esperado: ${expectedColumns}), tentando reagrupar...`);
-      
-      // Encontra onde está o número quebrado (geralmente coluna do valor)
-      // Procura por dois números consecutivos que parecem ser partes de um decimal
       const fixed: string[] = [];
       let i = 0;
       
@@ -342,14 +430,11 @@ export const Dividends = () => {
         const current = result[i];
         const next = result[i + 1];
         
-        // Se atual é número e próximo também é número curto (1-2 dígitos), provavelmente é decimal quebrado
         if (next !== undefined && 
             /^\d+$/.test(current) && 
             /^\d{1,2}$/.test(next) &&
-            fixed.length >= 2) { // Já passou ticker e data
-          // Junta como decimal: "11" + "7" -> "11.7"
+            fixed.length >= 2) {
           fixed.push(`${current}.${next}`);
-          console.log(`[CSV] Reagrupado: "${current}" + "${next}" -> "${current}.${next}"`);
           i += 2;
         } else {
           fixed.push(current);
@@ -363,43 +448,29 @@ export const Dividends = () => {
     return result;
   };
 
-  // Função robusta para parsear valores monetários brasileiros
   const parseMonetaryValue = (rawValue: string): number => {
     if (!rawValue) return 0;
     
     let value = String(rawValue).trim();
-    
-    // Remove símbolos de moeda e espaços
     value = value.replace(/[R$\s]/g, '');
-    
-    // Detecta o formato do número
-    // Formato BR: 1.234,56 (ponto = milhar, vírgula = decimal)
-    // Formato US: 1,234.56 (vírgula = milhar, ponto = decimal)
     
     const hasComma = value.includes(',');
     const hasDot = value.includes('.');
     
     if (hasComma && hasDot) {
-      // Ambos presentes - determina qual é decimal pelo último
       const lastComma = value.lastIndexOf(',');
       const lastDot = value.lastIndexOf('.');
       
       if (lastComma > lastDot) {
-        // Formato BR: 1.234,56
         value = value.replace(/\./g, '').replace(',', '.');
       } else {
-        // Formato US: 1,234.56
         value = value.replace(/,/g, '');
       }
     } else if (hasComma) {
-      // Só tem vírgula - assume que é decimal BR
-      // Ex: "26,43" -> "26.43"
       value = value.replace(',', '.');
     }
-    // Se só tem ponto, já está no formato correto para parseFloat
     
     const parsed = parseFloat(value);
-    
     return isNaN(parsed) ? 0 : parsed;
   };
 
@@ -410,7 +481,6 @@ export const Dividends = () => {
     setImportResults(null);
     
     try {
-      // Extrai ID da planilha e GID da aba
       let sheetId = '';
       let gid = '0';
       
@@ -424,80 +494,55 @@ export const Dividends = () => {
         throw new Error('Link inválido. Certifique-se de copiar o link completo da planilha.');
       }
       
-      // Constrói URL do CSV
       const csvUrl = `https://docs.google.com/spreadsheets/d/${sheetId}/export?format=csv&gid=${gid}`;
       
       const response = await fetch(csvUrl);
       
       if (!response.ok) {
-        throw new Error('Não foi possível acessar a planilha. Verifique se ela está compartilhada como "Qualquer pessoa com o link pode visualizar".');
+        throw new Error('Não foi possível acessar a planilha. Verifique se ela está compartilhada.');
       }
       
       const text = await response.text();
-      
-      // 🔥 LOG: Mostra as primeiras linhas do CSV para debug
-      console.log('=== CSV RECEBIDO (primeiras 5 linhas) ===');
       const allRows = text.split(/\r?\n/);
-      allRows.slice(0, 5).forEach((row, i) => console.log(`Linha ${i}: ${row}`));
-      console.log('=========================================');
-      
       const rows = allRows.filter(r => r.trim());
       
       if (rows.length < 2) throw new Error('Planilha vazia ou sem dados.');
       
-      // Detecta separador: TAB, ponto-e-vírgula, ou vírgula
       const firstRow = rows[0];
       let separator: string;
       
       if (firstRow.includes('\t')) {
         separator = '\t';
-        console.log('[IMPORT] Separador: TAB');
       } else if (firstRow.includes(';')) {
         separator = ';';
-        console.log('[IMPORT] Separador: ponto-e-vírgula');
       } else {
         separator = ',';
-        console.log('[IMPORT] Separador: vírgula');
       }
       
-      // Conta colunas pelo header
       const headerParts = firstRow.split(separator);
       const expectedColumns = headerParts.length;
-      console.log(`[IMPORT] Headers detectados: ${expectedColumns} colunas`);
-      console.log('[IMPORT] Headers:', headerParts);
       
       const headers = headerParts.map(h => h.trim().replace(/^["']|["']$/g, '').toLowerCase());
       
-      // Mapeia colunas da planilha
       const columnMap: Record<string, string> = {
         'ticker': 'ticker',
         'código': 'ticker',
         'codigo': 'ticker',
         'ativo': 'ticker',
         'papel': 'ticker',
-        'ação': 'ticker',
-        'acao': 'ticker',
         'data': 'paymentDate',
         'data pagamento': 'paymentDate',
-        'data de pagamento': 'paymentDate',
-        'data do pagamento': 'paymentDate',
-        'dt pagamento': 'paymentDate',
-        'dt. pagamento': 'paymentDate',
+        'mes': 'paymentDate',
+        'mês': 'paymentDate',
+        'mes/ano': 'paymentDate',
+        'mês/ano': 'paymentDate',
+        'competencia': 'paymentDate',
+        'competência': 'paymentDate',
         'valor': 'totalValue',
         'valor total': 'totalValue',
         'rendimento': 'totalValue',
-        'valor liquido': 'totalValue',
-        'valor líquido': 'totalValue',
         'tipo': 'type',
         'categoria': 'type',
-        'classe': 'type',
-        'tipo de provento': 'type',
-        'provento': 'type',
-        // Mapeamento para tipo de ativo (Ação/FII/ETF)
-        'fonte': 'assetType',
-        'tipo ativo': 'assetType',
-        'tipo de ativo': 'assetType',
-        'asset type': 'assetType'
       };
       
       const dividendsToImport: any[] = [];
@@ -505,7 +550,6 @@ export const Dividends = () => {
       
       rows.slice(1).forEach((row, index) => {
         try {
-          // Usa parser CSV inteligente que reagrupa decimais quebrados
           const values = parseCSVLine(row, expectedColumns, separator);
           const obj: any = {};
           
@@ -514,72 +558,65 @@ export const Dividends = () => {
             obj[mappedKey] = values[i] || '';
           });
           
-          // 🔥 LOG: Mostra dados brutos das primeiras linhas
-          if (index < 5) {
-            console.log(`[IMPORT] Linha ${index + 2}:`, {
-              raw: row.substring(0, 100),
-              valuesParsed: values,
-              ticker: obj.ticker,
-              date: obj.paymentDate,
-              value: obj.totalValue
-            });
-          }
-          
-          // Valida campos obrigatórios
           if (!obj.ticker || !obj.paymentDate || !obj.totalValue) {
-            errors.push(`Linha ${index + 2}: Faltam dados obrigatórios (Ticker, Data ou Valor)`);
+            errors.push(`Linha ${index + 2}: Faltam dados obrigatórios`);
             return;
           }
           
-          // 🔥 USA A FUNÇÃO ROBUSTA DE PARSE
           const parsedValue = parseMonetaryValue(obj.totalValue);
           
-          // Log detalhado para as primeiras linhas
-          if (index < 3) {
-            console.log(`[IMPORT] Linha ${index + 2}: "${obj.totalValue}" -> ${parsedValue}`);
-          }
-          
           if (parsedValue <= 0) {
-            errors.push(`Linha ${index + 2}: Valor não é um número válido (${obj.totalValue})`);
+            errors.push(`Linha ${index + 2}: Valor inválido (${obj.totalValue})`);
             return;
           }
           
-          // Normaliza o tipo do dividendo
           let dividendType = 'DIVIDENDO';
           if (obj.type) {
             const typeNormalized = String(obj.type).toUpperCase().trim();
             if (['DIVIDENDO', 'DIVIDENDOS', 'DIV'].includes(typeNormalized)) {
               dividendType = 'DIVIDENDO';
-            } else if (['JCP', 'JUROS', 'JUROS SOBRE CAPITAL'].includes(typeNormalized)) {
+            } else if (['JCP', 'JUROS'].includes(typeNormalized)) {
               dividendType = 'JCP';
             } else if (['RENDIMENTO', 'RENDIMENTOS', 'REND', 'FII'].includes(typeNormalized)) {
               dividendType = 'RENDIMENTO';
             }
           }
           
+          let paymentDate = obj.paymentDate;
+          
+          // Converte vários formatos de data para YYYY-MM-01
+          if (paymentDate.includes('/')) {
+            const parts = paymentDate.split('/');
+            if (parts.length === 2) {
+              // Formato MM/YYYY ou MMM/YYYY
+              let [monthPart, yearPart] = parts;
+              
+              // Se o mês é texto (Jan, Fev, etc)
+              const monthIdx = MONTH_NAMES.findIndex(m => 
+                m.toLowerCase() === monthPart.toLowerCase().substring(0, 3)
+              );
+              
+              if (monthIdx >= 0) {
+                paymentDate = `${yearPart}-${String(monthIdx + 1).padStart(2, '0')}-01`;
+              } else {
+                // Assume MM/YYYY
+                paymentDate = `${yearPart}-${monthPart.padStart(2, '0')}-01`;
+              }
+            } else if (parts.length === 3) {
+              // Formato DD/MM/YYYY - converte para YYYY-MM-01
+              const [day, month, year] = parts;
+              paymentDate = `${year}-${month.padStart(2, '0')}-01`;
+            }
+          }
+          
           const dividend: any = {
             ticker: String(obj.ticker).toUpperCase().trim(),
-            payment_date: obj.paymentDate,
+            payment_date: paymentDate,
             total_value: parsedValue,
             type: dividendType
           };
           
-          // Normaliza data (aceita DD/MM/YYYY ou YYYY-MM-DD)
-          if (dividend.payment_date.includes('/')) {
-            const parts = dividend.payment_date.split('/');
-            if (parts.length === 3) {
-              const [day, month, year] = parts;
-              dividend.payment_date = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
-            }
-          }
-          
-          // Valida valores finais
-          if (parsedValue <= 0) {
-            errors.push(`Linha ${index + 2}: Valor inválido (${obj.totalValue})`);
-            return;
-          }
-          
-          if (!dividend.payment_date || dividend.payment_date.length < 8) {
+          if (!dividend.payment_date || dividend.payment_date.length < 7) {
             errors.push(`Linha ${index + 2}: Data inválida (${obj.paymentDate})`);
             return;
           }
@@ -594,37 +631,24 @@ export const Dividends = () => {
       if (dividendsToImport.length === 0) {
         let errorMsg = 'Nenhum dividendo válido encontrado.';
         if (errors.length > 0) {
-          errorMsg += `\n\nErros encontrados:\n${errors.slice(0, 5).join('\n')}`;
-          if (errors.length > 5) errorMsg += `\n... e mais ${errors.length - 5} erros.`;
+          errorMsg += `\n\nErros:\n${errors.slice(0, 5).join('\n')}`;
         }
         throw new Error(errorMsg);
       }
       
-      // 🔥 LOG: Mostra os primeiros dividendos que serão enviados
-      console.log('=== DIVIDENDOS A SEREM IMPORTADOS (primeiros 5) ===');
-      dividendsToImport.slice(0, 5).forEach((d, i) => {
-        console.log(`[${i + 1}] ${d.ticker} | ${d.payment_date} | total_value: ${d.total_value} (tipo: ${typeof d.total_value})`);
-      });
-      console.log('===================================================');
-      
-      // Importa em lote
       const count = await bulkInsert('dividends', dividendsToImport);
-      
-      console.log(`[IMPORT] ${count} dividendos inseridos no banco.`);
       
       setImportResults({
         success: true,
         message: `${count} dividendos importados com sucesso!`,
         count,
-        preview: dividendsToImport.slice(0, 5),
         errors: errors.length > 0 ? errors.slice(0, 5) : undefined
       });
       
     } catch (err: any) {
-      console.error('Erro ao importar:', err);
       setImportResults({
         success: false,
-        message: err.message || 'Erro desconhecido ao processar a planilha.'
+        message: err.message || 'Erro ao processar a planilha.'
       });
     }
     
@@ -660,7 +684,7 @@ export const Dividends = () => {
           <Button variant="ghost" onClick={() => setShowImportModal(true)}>
             <Upload size={18} /> Importar Planilha
           </Button>
-          <Button onClick={() => { setEditingDividend(null); setIsOpen(true); }}>
+          <Button onClick={handleOpenNew}>
             <Plus size={18} /> Adicionar Dividendo
           </Button>
         </div>
@@ -875,7 +899,7 @@ export const Dividends = () => {
                       onClick={() => handleSort('paymentDate')} 
                       className="flex items-center gap-2 hover:text-white transition-colors"
                     >
-                      Data <SortIcon field="paymentDate" />
+                      Mês/Ano <SortIcon field="paymentDate" />
                     </button>
                   </th>
                   <th className="p-5">
@@ -916,8 +940,8 @@ export const Dividends = () => {
               <tbody className="divide-y divide-slate-800">
                 {filteredAndSortedDividends.map(d => (
                   <tr key={d.id} className="hover:bg-slate-800/30 transition-colors group">
-                    <td className="p-5 font-mono text-slate-500">
-                      {new Date(d.paymentDate).toLocaleDateString('pt-BR')}
+                    <td className="p-5 font-mono text-slate-300 font-medium">
+                      {formatMonthYear(d.paymentDate)}
                     </td>
                     <td className="p-5 font-bold text-white">{d.ticker}</td>
                     <td className="p-5">
@@ -993,20 +1017,19 @@ export const Dividends = () => {
             {assets.map(a => <option key={a.id} value={a.ticker}>{a.ticker} - {a.name}</option>)}
           </Select>
           
-          <div className="grid grid-cols-2 gap-4">
-            <Input 
-              label="Data Pagamento" 
-              type="date" 
-              name="paymentDate" 
-              required 
-              defaultValue={editingDividend?.paymentDate || new Date().toISOString().split('T')[0]}
-            />
-            <Select label="Tipo" name="type" defaultValue={editingDividend?.type || 'DIVIDENDO'}>
-              <option value="DIVIDENDO">Dividendo</option>
-              <option value="JCP">JCP</option>
-              <option value="RENDIMENTO">Rendimento (FII)</option>
-            </Select>
-          </div>
+          <MonthYearPicker
+            label="Mês/Ano do Pagamento"
+            month={formMonth}
+            year={formYear}
+            onMonthChange={setFormMonth}
+            onYearChange={setFormYear}
+          />
+          
+          <Select label="Tipo" name="type" defaultValue={editingDividend?.type || 'DIVIDENDO'}>
+            <option value="DIVIDENDO">Dividendo</option>
+            <option value="JCP">JCP</option>
+            <option value="RENDIMENTO">Rendimento (FII)</option>
+          </Select>
           
           <Input 
             label="Valor Total (R$)" 
@@ -1035,7 +1058,8 @@ export const Dividends = () => {
               <div className="bg-blue-500/10 border border-blue-500/20 rounded-xl p-4">
                 <p className="text-xs text-blue-300">
                   <strong>Cole o link da sua planilha do Google Sheets.</strong>
-                  <br />Certifique-se de que a planilha tenha as colunas: Ticker, Data e Valor.
+                  <br />Colunas aceitas: Ticker, Mês/Ano (ou Data) e Valor.
+                  <br />Formatos de data: Jan/2025, 01/2025, 15/01/2025
                 </p>
               </div>
               
@@ -1048,13 +1072,13 @@ export const Dividends = () => {
               
               <div className="bg-slate-950 border border-slate-800 rounded-xl p-4">
                 <p className="text-xs text-slate-400 mb-2">
-                  <strong>Exemplo de estrutura esperada:</strong>
+                  <strong>Exemplo de estrutura:</strong>
                 </p>
                 <table className="w-full text-xs text-slate-500">
                   <thead>
                     <tr className="border-b border-slate-800">
                       <th className="text-left p-2">Ticker</th>
-                      <th className="text-left p-2">Data</th>
+                      <th className="text-left p-2">Mês/Ano</th>
                       <th className="text-left p-2">Valor</th>
                       <th className="text-left p-2">Tipo</th>
                     </tr>
@@ -1062,13 +1086,13 @@ export const Dividends = () => {
                   <tbody>
                     <tr>
                       <td className="p-2">PETR4</td>
-                      <td className="p-2">15/12/2024</td>
+                      <td className="p-2">Dez/2024</td>
                       <td className="p-2">125,50</td>
                       <td className="p-2">DIVIDENDO</td>
                     </tr>
                     <tr>
                       <td className="p-2">HGLG11</td>
-                      <td className="p-2">10/12/2024</td>
+                      <td className="p-2">Nov/2024</td>
                       <td className="p-2">1,35</td>
                       <td className="p-2">RENDIMENTO</td>
                     </tr>
@@ -1081,11 +1105,7 @@ export const Dividends = () => {
                 className="w-full"
                 disabled={!importUrl || isImporting}
               >
-                {isImporting ? (
-                  <>Processando...</>
-                ) : (
-                  <><Upload size={18} /> Importar Dividendos</>
-                )}
+                {isImporting ? 'Processando...' : <><Upload size={18} /> Importar Dividendos</>}
               </Button>
             </>
           ) : (
@@ -1104,11 +1124,6 @@ export const Dividends = () => {
                   <p className={importResults.success ? 'text-emerald-300 font-medium' : 'text-rose-300'}>
                     {importResults.message}
                   </p>
-                  {importResults.success && (
-                    <p className="text-xs text-slate-400 mt-2">
-                      Os dividendos foram adicionados ao histórico e já estão refletidos nos gráficos.
-                    </p>
-                  )}
                 </div>
               </div>
               
