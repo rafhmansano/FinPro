@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, ReactNode } from 'react';
 import { supabase, isSupabaseConfigured } from './supabase';
 
 // Types
@@ -58,15 +58,29 @@ export interface Dividend {
   user_id?: string;
 }
 
+export interface PortfolioPosition {
+  id: string;
+  ticker: string;
+  name: string;
+  type: string;
+  quantity: number;
+  avgPrice: number;
+  totalValue: number;
+  currency: string;
+}
+
 interface FinanceContextType {
   accounts: Account[];
   transactions: Transaction[];
   assets: Asset[];
   trades: Trade[];
   dividends: Dividend[];
+  portfolio: PortfolioPosition[];
   loading: boolean;
   error: string | null;
   isConfigured: boolean;
+  isDemo: boolean;
+  user: { id: string; email?: string } | null;
   addAccount: (account: Account) => Promise<void>;
   addTransaction: (transaction: Transaction) => Promise<void>;
   addAsset: (asset: Asset) => Promise<void>;
@@ -101,6 +115,58 @@ export const FinanceProvider: React.FC<FinanceProviderProps> = ({ children }) =>
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isConfigured] = useState(isSupabaseConfigured());
+  const [user] = useState<{ id: string; email?: string } | null>({ id: 'local-user', email: 'usuario@finpro.app' });
+  const isDemo = !isConfigured;
+
+  // Calcula portfolio baseado em trades e assets
+  const portfolio = useMemo(() => {
+    const positions: Record<string, { quantity: number; totalCost: number }> = {};
+    
+    trades.forEach(trade => {
+      const ticker = trade.ticker?.toUpperCase();
+      if (!ticker) return;
+      
+      if (!positions[ticker]) {
+        positions[ticker] = { quantity: 0, totalCost: 0 };
+      }
+      
+      const qty = Number(trade.quantity) || 0;
+      const price = Number(trade.price) || 0;
+      const tradeType = (trade.type || '').toUpperCase();
+      
+      if (tradeType === 'BUY' || tradeType === 'COMPRA') {
+        positions[ticker].quantity += qty;
+        positions[ticker].totalCost += qty * price;
+      } else if (tradeType === 'SELL' || tradeType === 'VENDA') {
+        positions[ticker].quantity -= qty;
+        // Ajusta custo proporcionalmente
+        if (positions[ticker].quantity > 0) {
+          const avgPrice = positions[ticker].totalCost / (positions[ticker].quantity + qty);
+          positions[ticker].totalCost = positions[ticker].quantity * avgPrice;
+        } else {
+          positions[ticker] = { quantity: 0, totalCost: 0 };
+        }
+      }
+    });
+    
+    return Object.entries(positions)
+      .filter(([_, pos]) => pos.quantity > 0)
+      .map(([ticker, pos]) => {
+        const asset = assets.find(a => a.ticker?.toUpperCase() === ticker);
+        const avgPrice = pos.quantity > 0 ? pos.totalCost / pos.quantity : 0;
+        return {
+          id: asset?.id || ticker,
+          ticker,
+          name: asset?.name || ticker,
+          type: asset?.type || 'ACAO',
+          quantity: pos.quantity,
+          avgPrice,
+          totalValue: pos.quantity * avgPrice,
+          currency: asset?.currency || (ticker === 'TFLO' ? 'USD' : 'BRL')
+        };
+      })
+      .sort((a, b) => b.totalValue - a.totalValue);
+  }, [trades, assets]);
 
   const fetchData = useCallback(async () => {
     if (!isConfigured) {
@@ -247,9 +313,12 @@ export const FinanceProvider: React.FC<FinanceProviderProps> = ({ children }) =>
         assets,
         trades,
         dividends,
+        portfolio,
         loading,
         error,
         isConfigured,
+        isDemo,
+        user,
         addAccount,
         addTransaction,
         addAsset,
