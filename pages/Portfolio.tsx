@@ -15,40 +15,30 @@ const formatCurrency = (value: number, currency: string = 'BRL'): string => {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(safeVal);
 };
 
-const getCurrencySymbol = (currency: string): string => {
-  return currency === 'USD' ? '$' : 'R$';
-};
-
 export const Portfolio = () => {
   const { assets, trades, addAsset, updateAsset, deleteItem } = useFinance();
   const [showAssetModal, setShowAssetModal] = useState(false);
   const [editingAsset, setEditingAsset] = useState<any>(null);
   const [filterType, setFilterType] = useState<string>('ALL');
 
-  // FIX #8 - Lista de moedas suportadas
+  // Lista de moedas suportadas
   const currencies = [
     { code: 'BRL', name: 'Real (R$)', symbol: 'R$' },
     { code: 'USD', name: 'Dólar (US$)', symbol: '$' }
   ];
 
-  // Identificar moeda do ativo
-  const getAssetCurrency = (ticker: string): string => {
-    // TFLO é sempre USD
-    if (ticker?.toUpperCase() === 'TFLO') return 'USD';
-    const asset = assets.find(a => a.ticker?.toUpperCase() === ticker?.toUpperCase());
-    return asset?.currency || 'BRL';
-  };
-
   // Processar ativos com posições
+  // CORREÇÃO: Usar dados de quantity e avg_price dos assets OU calcular dos trades
   const assetsWithPositions = useMemo(() => {
-    const positions: Record<string, { quantity: number; avgPrice: number; totalCost: number }> = {};
+    // Primeiro, calcula posições dos trades (se houver)
+    const positionsFromTrades: Record<string, { quantity: number; avgPrice: number; totalCost: number }> = {};
     
     trades.forEach(trade => {
       const ticker = trade.ticker?.toUpperCase();
       if (!ticker) return;
       
-      if (!positions[ticker]) {
-        positions[ticker] = { quantity: 0, avgPrice: 0, totalCost: 0 };
+      if (!positionsFromTrades[ticker]) {
+        positionsFromTrades[ticker] = { quantity: 0, avgPrice: 0, totalCost: 0 };
       }
       
       const qty = Number(trade.quantity) || 0;
@@ -56,32 +46,42 @@ export const Portfolio = () => {
       const type = (trade.type || '').toUpperCase();
       
       if (type === 'BUY' || type === 'COMPRA') {
-        const newTotalCost = positions[ticker].totalCost + (qty * price);
-        const newQty = positions[ticker].quantity + qty;
-        positions[ticker].quantity = newQty;
-        positions[ticker].totalCost = newTotalCost;
-        positions[ticker].avgPrice = newQty > 0 ? newTotalCost / newQty : 0;
+        const newTotalCost = positionsFromTrades[ticker].totalCost + (qty * price);
+        const newQty = positionsFromTrades[ticker].quantity + qty;
+        positionsFromTrades[ticker].quantity = newQty;
+        positionsFromTrades[ticker].totalCost = newTotalCost;
+        positionsFromTrades[ticker].avgPrice = newQty > 0 ? newTotalCost / newQty : 0;
       } else if (type === 'SELL' || type === 'VENDA') {
-        positions[ticker].quantity -= qty;
-        if (positions[ticker].quantity <= 0) {
-          positions[ticker] = { quantity: 0, avgPrice: 0, totalCost: 0 };
+        positionsFromTrades[ticker].quantity -= qty;
+        if (positionsFromTrades[ticker].quantity <= 0) {
+          positionsFromTrades[ticker] = { quantity: 0, avgPrice: 0, totalCost: 0 };
         }
       }
     });
     
     return assets.map(asset => {
       const ticker = asset.ticker?.toUpperCase() || '';
-      const pos = positions[ticker] || { quantity: 0, avgPrice: 0, totalCost: 0 };
-      // FIX #8 - Usar moeda correta
+      const tradePos = positionsFromTrades[ticker];
+      
+      // CORREÇÃO: Prioriza dados do asset, depois dos trades
+      // Lê quantity e avg_price diretamente do asset (campos do banco)
+      const assetQty = Number((asset as any).quantity) || 0;
+      const assetAvgPrice = Number((asset as any).avg_price || (asset as any).avgPrice) || 0;
+      
+      // Se o asset tem quantidade, usa. Senão, usa dos trades
+      const quantity = assetQty > 0 ? assetQty : (tradePos?.quantity || 0);
+      const avgPrice = assetQty > 0 ? assetAvgPrice : (tradePos?.avgPrice || 0);
+      
+      // Moeda: verifica no asset ou usa USD para TFLO
       const currency = asset.currency || (ticker === 'TFLO' ? 'USD' : 'BRL');
       
       return {
         ...asset,
         currency,
-        quantity: pos.quantity,
-        avgPrice: pos.avgPrice,
-        totalValue: pos.quantity * pos.avgPrice,
-        hasPosition: pos.quantity > 0
+        quantity,
+        avgPrice,
+        totalValue: quantity * avgPrice,
+        hasPosition: quantity > 0
       };
     }).sort((a, b) => b.totalValue - a.totalValue);
   }, [assets, trades]);
@@ -109,7 +109,7 @@ export const Portfolio = () => {
       const type = a.type || 'ACAO';
       const currency = a.currency || 'BRL';
       if (totals[type]) {
-        totals[type][currency] += a.totalValue;
+        totals[type][currency as 'BRL' | 'USD'] += a.totalValue;
       }
     });
     
@@ -119,7 +119,7 @@ export const Portfolio = () => {
   // Total geral (BRL)
   const totalPortfolioBRL = useMemo(() => {
     return activePositions
-      .filter(a => a.currency === 'BRL')
+      .filter(a => a.currency === 'BRL' || !a.currency)
       .reduce((sum, a) => sum + a.totalValue, 0);
   }, [activePositions]);
 
@@ -149,7 +149,9 @@ export const Portfolio = () => {
       name: String(data.name),
       type: String(data.type),
       sector: String(data.sector) || null,
-      currency: String(data.currency) || 'BRL' // FIX #8
+      currency: String(data.currency) || 'BRL',
+      quantity: Number(data.quantity) || 0,
+      avg_price: Number(data.avgPrice) || 0
     };
     
     if (editingAsset) {
@@ -214,7 +216,7 @@ export const Portfolio = () => {
           </div>
         </div>
 
-        {/* FIX #8 - Card separado para USD */}
+        {/* Card separado para USD */}
         {totalPortfolioUSD > 0 && (
           <div className="bg-gradient-to-br from-emerald-600/20 to-emerald-700/10 border border-emerald-500/20 rounded-2xl p-6">
             <div className="flex items-center gap-3">
@@ -267,24 +269,30 @@ export const Portfolio = () => {
             Distribuição por Tipo
           </h3>
           <div className="h-[300px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={pieData}
-                  dataKey="value"
-                  nameKey="name"
-                  cx="50%"
-                  cy="50%"
-                  outerRadius={100}
-                  label={({ name, percent }) => `${name} ${(percent * 100).toFixed(1)}%`}
-                >
-                  {pieData.map((entry, idx) => (
-                    <Cell key={idx} fill={entry.color} />
-                  ))}
-                </Pie>
-                <Tooltip formatter={(val: number) => formatCurrency(val)} />
-              </PieChart>
-            </ResponsiveContainer>
+            {pieData.length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={pieData}
+                    dataKey="value"
+                    nameKey="name"
+                    cx="50%"
+                    cy="50%"
+                    outerRadius={100}
+                    label={({ name, percent }) => `${name} ${(percent * 100).toFixed(1)}%`}
+                  >
+                    {pieData.map((entry, idx) => (
+                      <Cell key={idx} fill={entry.color} />
+                    ))}
+                  </Pie>
+                  <Tooltip formatter={(val: number) => formatCurrency(val)} />
+                </PieChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="h-full flex items-center justify-center text-slate-500">
+                Nenhuma posição ativa
+              </div>
+            )}
           </div>
         </div>
 
@@ -294,15 +302,21 @@ export const Portfolio = () => {
             Posições Ativas
           </h3>
           <div className="h-[300px] overflow-y-auto">
-            <ResponsiveContainer width="100%" height={Math.max(300, activePositions.length * 35)}>
-              <BarChart data={activePositions} layout="vertical" margin={{ left: 60 }}>
-                <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#1e293b" />
-                <XAxis type="number" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 11 }} />
-                <YAxis dataKey="ticker" type="category" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 11 }} width={55} />
-                <Tooltip content={<CustomTooltip />} />
-                <Bar dataKey="totalValue" fill={COLORS.primary} radius={[0, 4, 4, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
+            {activePositions.length > 0 ? (
+              <ResponsiveContainer width="100%" height={Math.max(300, activePositions.length * 35)}>
+                <BarChart data={activePositions} layout="vertical" margin={{ left: 60 }}>
+                  <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#1e293b" />
+                  <XAxis type="number" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 11 }} />
+                  <YAxis dataKey="ticker" type="category" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 11 }} width={55} />
+                  <Tooltip content={<CustomTooltip />} />
+                  <Bar dataKey="totalValue" fill={COLORS.primary} radius={[0, 4, 4, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="h-full flex items-center justify-center text-slate-500">
+                Nenhuma posição ativa
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -341,7 +355,6 @@ export const Portfolio = () => {
                       {asset.type}
                     </span>
                   </td>
-                  {/* FIX #8 - Coluna de moeda */}
                   <td className="p-4">
                     <span className={`text-xs px-2 py-1 rounded font-bold ${
                       asset.currency === 'USD' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-slate-700 text-slate-300'
@@ -374,6 +387,13 @@ export const Portfolio = () => {
                   </td>
                 </tr>
               ))}
+              {filteredAssets.length === 0 && (
+                <tr>
+                  <td colSpan={9} className="p-10 text-center text-slate-500">
+                    Nenhum ativo cadastrado.
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
@@ -406,7 +426,6 @@ export const Portfolio = () => {
             <option value="ETF">ETF</option>
           </Select>
           
-          {/* FIX #8 - Campo de moeda */}
           <Select label="Moeda" name="currency" defaultValue={editingAsset?.currency || 'BRL'}>
             {currencies.map(c => (
               <option key={c.code} value={c.code}>{c.name}</option>
@@ -419,6 +438,26 @@ export const Portfolio = () => {
             placeholder="Ex: Energia" 
             defaultValue={editingAsset?.sector}
           />
+
+          <div className="grid grid-cols-2 gap-4">
+            <Input 
+              label="Quantidade" 
+              name="quantity" 
+              type="number"
+              step="1"
+              placeholder="Ex: 100" 
+              defaultValue={editingAsset?.quantity || ''}
+            />
+            <Input 
+              label="Preço Médio" 
+              name="avgPrice" 
+              type="number"
+              step="0.01"
+              placeholder="Ex: 25.50" 
+              defaultValue={editingAsset?.avgPrice || ''}
+            />
+          </div>
+
           <Button type="submit" className="w-full">
             {editingAsset ? <><Save size={18} /> Atualizar</> : <><Plus size={18} /> Cadastrar</>}
           </Button>
