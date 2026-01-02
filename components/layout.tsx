@@ -55,7 +55,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, onNavigat
             <PieChart className="text-white" size={24} />
           </div>
           <div>
-            <h1 className="text-2xl font-bold text-white tracking-tight">Fin<span className="text-blue-500">B3</span> Pro</h1>
+            <h1 className="text-2xl font-bold text-white tracking-tight">FinPro</h1>
             <p className="text-xs text-slate-500 font-mono tracking-wider">TERMINAL V2.1</p>
           </div>
         </div>
@@ -81,7 +81,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, onNavigat
             <div className="bg-blue-600 p-1.5 rounded shadow-lg">
                 <PieChart className="text-white" size={18} />
             </div>
-            <h1 className="font-bold text-white tracking-tight">FinB3 Pro</h1>
+            <h1 className="font-bold text-white tracking-tight">FinPro</h1>
          </div>
          <button onClick={() => setIsMobileOpen(true)} className="text-slate-300 p-2 hover:bg-slate-800 rounded-lg">
             <Menu size={24} />
