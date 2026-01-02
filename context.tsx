@@ -1,374 +1,267 @@
-import React, { useState, useEffect, useMemo, createContext, useContext, useRef } from 'react';
-import { supabase, supabaseAdmin, isMock, normalizeAssetType } from './services';
-import { Asset, Transaction, Trade, Dividend, PortfolioPosition, Account } from './types';
-import { User } from '@supabase/supabase-js';
+import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
+import { supabase, isSupabaseConfigured } from './supabase';
 
-const ALLOWED_ASSET_TYPES = ['ACAO', 'FII', 'RENDA_FIXA', 'ETF', 'CRIPT'];
+// Types
+export interface Account {
+  id?: string;
+  name: string;
+  type: string;
+  initial_balance?: number;
+  initialBalance?: number;
+  icon?: string;
+  user_id?: string;
+}
+
+export interface Transaction {
+  id?: string;
+  account_id?: string;
+  accountId?: string;
+  description: string;
+  value?: number;
+  amount?: number;
+  type: string;
+  category?: string;
+  date?: string;
+  transaction_date?: string;
+  user_id?: string;
+}
+
+export interface Asset {
+  id?: string;
+  ticker: string;
+  name: string;
+  type: string;
+  sector?: string;
+  currency?: string;
+  user_id?: string;
+}
+
+export interface Trade {
+  id?: string;
+  ticker: string;
+  type: string;
+  quantity: number;
+  price: number;
+  date?: string;
+  trade_date?: string;
+  user_id?: string;
+}
+
+export interface Dividend {
+  id?: string;
+  ticker: string;
+  type?: string;
+  payment_date?: string;
+  paymentDate?: string;
+  total_value?: number;
+  totalValue?: number;
+  user_id?: string;
+}
 
 interface FinanceContextType {
-  user: User | null;
-  loading: boolean;
+  accounts: Account[];
   transactions: Transaction[];
   assets: Asset[];
   trades: Trade[];
   dividends: Dividend[];
-  accounts: Account[];
-  portfolio: PortfolioPosition[];
-  addTransaction: (data: Omit<Transaction, 'id'>) => Promise<any>;
-  addAsset: (data: Omit<Asset, 'id'>) => Promise<any>;
-  addTrade: (data: Omit<Trade, 'id'>) => Promise<any>;
-  addDividend: (data: Omit<Dividend, 'id'>) => Promise<any>;
-  addAccount: (data: Omit<Account, 'id'>) => Promise<any>;
-  updateItem: (table: string, id: string, data: any) => Promise<void>;
-  bulkInsert: (table: string, items: any[]) => Promise<number>;
+  loading: boolean;
+  error: string | null;
+  isConfigured: boolean;
+  addAccount: (account: Account) => Promise<void>;
+  addTransaction: (transaction: Transaction) => Promise<void>;
+  addAsset: (asset: Asset) => Promise<void>;
+  updateAsset: (id: string, asset: Partial<Asset>) => Promise<void>;
+  addTrade: (trade: Trade) => Promise<void>;
+  addDividend: (dividend: Dividend) => Promise<void>;
   deleteItem: (table: string, id: string) => Promise<void>;
+  bulkInsert: (table: string, items: any[]) => Promise<number>;
   refreshData: () => Promise<void>;
-  getDbCounts: () => Promise<Record<string, number>>;
-  adoptOrphanData: () => Promise<number>;
-  isDemo: boolean;
-  loadDatabaseData: (force?: boolean) => Promise<void>;
 }
 
 const FinanceContext = createContext<FinanceContextType | undefined>(undefined);
 
-export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [user, setUser] = useState<User | null>(null);
+export const useFinance = () => {
+  const context = useContext(FinanceContext);
+  if (!context) {
+    throw new Error('useFinance must be used within a FinanceProvider');
+  }
+  return context;
+};
+
+interface FinanceProviderProps {
+  children: ReactNode;
+}
+
+export const FinanceProvider: React.FC<FinanceProviderProps> = ({ children }) => {
+  const [accounts, setAccounts] = useState<Account[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [assets, setAssets] = useState<Asset[]>([]);
   const [trades, setTrades] = useState<Trade[]>([]);
   const [dividends, setDividends] = useState<Dividend[]>([]);
-  const [accounts, setAccounts] = useState<Account[]>([]);
   const [loading, setLoading] = useState(true);
-  const [isDemo, setIsDemo] = useState(false);
-  const isInitialMount = useRef(true);
-  const isLoadingData = useRef(false);
+  const [error, setError] = useState<string | null>(null);
+  const [isConfigured] = useState(isSupabaseConfigured());
 
-  const enableDemoMode = () => {
-    setIsDemo(true);
-    setUser({ id: 'demo-user', email: 'demo@finb3.pro' } as User);
-    setLoading(false);
-  };
+  const fetchData = useCallback(async () => {
+    if (!isConfigured) {
+      setLoading(false);
+      return;
+    }
 
-  useEffect(() => {
-    if (isMock) { enableDemoMode(); return; }
-    const initAuth = async () => {
-      try {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (session?.user) {
-           setUser(session.user);
-           setIsDemo(false);
-        } else {
-           enableDemoMode();
-        }
-      } catch (err) {
-        enableDemoMode();
-      }
-    };
-    initAuth();
-  }, []);
+    setLoading(true);
+    setError(null);
 
-  const fetchTableData = async (table: string): Promise<any[]> => {
-    if (isMock) return [];
     try {
-      const client = supabaseAdmin || supabase;
-      let query = client.from(table).select('*').order('created_at', { ascending: false });
-      
-      if (!supabaseAdmin && user && user.id !== 'demo-user') {
-        query = query.eq('user_id', user.id);
-      }
+      const [accountsRes, transactionsRes, assetsRes, tradesRes, dividendsRes] = await Promise.all([
+        supabase.from('accounts').select('*'),
+        supabase.from('transactions').select('*'),
+        supabase.from('assets').select('*'),
+        supabase.from('trades').select('*'),
+        supabase.from('dividends').select('*')
+      ]);
 
-      const { data, error } = await query;
-      if (error) {
-          console.warn(`Aviso ao buscar ${table}:`, error.message);
-          return [];
-      }
-      return data || [];
-    } catch (e) {
-      console.error(`Falha técnica ao buscar ${table}:`, e);
-      return [];
+      if (accountsRes.error) console.error('Accounts error:', accountsRes.error);
+      if (transactionsRes.error) console.error('Transactions error:', transactionsRes.error);
+      if (assetsRes.error) console.error('Assets error:', assetsRes.error);
+      if (tradesRes.error) console.error('Trades error:', tradesRes.error);
+      if (dividendsRes.error) console.error('Dividends error:', dividendsRes.error);
+
+      setAccounts(accountsRes.data || []);
+      setTransactions(transactionsRes.data || []);
+      setAssets(assetsRes.data || []);
+      setTrades(tradesRes.data || []);
+      setDividends(dividendsRes.data || []);
+    } catch (err: any) {
+      console.error('Fetch error:', err);
+      setError(err.message || 'Erro ao carregar dados');
+    } finally {
+      setLoading(false);
     }
-  };
-
-  const loadDatabaseData = async (force: boolean = false) => {
-      if (isLoadingData.current) {
-        console.log('⏸️ Carregamento já em andamento, ignorando chamada duplicada');
-        return;
-      }
-
-      if (isMock) { 
-        setLoading(false); 
-        return; 
-      }
-      
-      isLoadingData.current = true;
-
-      if (isInitialMount.current || force === true) {
-          setLoading(true);
-      }
-
-      try {
-        const [transData, assetsData, tradesData, divsData, accsData] = await Promise.all([
-          fetchTableData('transactions'),
-          fetchTableData('assets'),
-          fetchTableData('trades'),
-          fetchTableData('dividends'),
-          fetchTableData('accounts'),
-        ]);
-        setTransactions(transData);
-        setAssets(assetsData);
-        setTrades(tradesData);
-        setDividends(divsData);
-        setAccounts(accsData);
-      } catch (err) {
-        console.error("Erro crítico no carregamento do banco:", err);
-      } finally {
-        setLoading(false);
-        isInitialMount.current = false;
-        isLoadingData.current = false;
-      }
-  };
-
-  const bulkInsert = async (table: string, items: any[]) => {
-    if (isMock) return 0;
-    const client = supabaseAdmin || supabase;
-    const itemsToInsert = items.map((item) => {
-      const newItem = { ...item };
-      
-      if (table === 'assets') {
-        newItem.type = normalizeAssetType(newItem.type);
-        if (!ALLOWED_ASSET_TYPES.includes(newItem.type)) newItem.type = 'ACAO';
-      }
-      
-      if (table === 'dividends') {
-        if (newItem.paymentDate) {
-          newItem.payment_date = newItem.paymentDate;
-          delete newItem.paymentDate;
-        }
-        if (newItem.totalValue) {
-          newItem.total_value = newItem.totalValue;
-          delete newItem.totalValue;
-        }
-        if (newItem.type) {
-          const typeMap: Record<string, string> = {
-            'DIVIDENDO': 'DIVIDENDO',
-            'DIVIDENDOS': 'DIVIDENDO',
-            'DIV': 'DIVIDENDO',
-            'JCP': 'JCP',
-            'JUROS': 'JCP',
-            'RENDIMENTO': 'RENDIMENTO',
-            'RENDIMENTOS': 'RENDIMENTO',
-            'REND': 'RENDIMENTO'
-          };
-          newItem.type = typeMap[String(newItem.type).toUpperCase()] || 'DIVIDENDO';
-        }
-      }
-      
-      if (table === 'trades') {
-        if (newItem.assetId) {
-          newItem.asset_id = newItem.assetId;
-          delete newItem.assetId;
-        }
-      }
-      
-      if (table === 'transactions') {
-        if (newItem.accountId) {
-          newItem.account_id = newItem.accountId;
-          delete newItem.accountId;
-        }
-      }
-      
-      if (table === 'accounts') {
-        if (newItem.initialBalance) {
-          newItem.initial_balance = newItem.initialBalance;
-          delete newItem.initialBalance;
-        }
-      }
-      
-      if (user && user.id && user.id !== 'demo-user') newItem.user_id = user.id;
-      return newItem;
-    });
-    
-    const { data, error } = await client.from(table).insert(itemsToInsert).select();
-    if (error) throw new Error(error.message);
-    await loadDatabaseData(false);
-    return data?.length || 0;
-  };
-
-  const handleAdd = async (table: string, data: any, setter: React.Dispatch<React.SetStateAction<any[]>>) => {
-    if (isMock) return data;
-    const client = supabaseAdmin || supabase;
-    const insertPayload = { ...data };
-    
-    if (table === 'assets' && insertPayload.type) {
-        insertPayload.type = normalizeAssetType(insertPayload.type);
-        if (!ALLOWED_ASSET_TYPES.includes(insertPayload.type)) insertPayload.type = 'ACAO';
-    }
-    
-    if (table === 'dividends') {
-        if (insertPayload.paymentDate) {
-            insertPayload.payment_date = insertPayload.paymentDate;
-            delete insertPayload.paymentDate;
-        }
-        if (insertPayload.totalValue) {
-            insertPayload.total_value = insertPayload.totalValue;
-            delete insertPayload.totalValue;
-        }
-        if (insertPayload.type) {
-            const typeMap: Record<string, string> = {
-                'DIVIDENDO': 'DIVIDENDO',
-                'DIVIDENDOS': 'DIVIDENDO',
-                'DIV': 'DIVIDENDO',
-                'JCP': 'JCP',
-                'JUROS': 'JCP',
-                'RENDIMENTO': 'RENDIMENTO',
-                'RENDIMENTOS': 'RENDIMENTO',
-                'REND': 'RENDIMENTO'
-            };
-            insertPayload.type = typeMap[String(insertPayload.type).toUpperCase()] || 'DIVIDENDO';
-        }
-    }
-    
-    if (table === 'trades') {
-        if (insertPayload.assetId) {
-            insertPayload.asset_id = insertPayload.assetId;
-            delete insertPayload.assetId;
-        }
-    }
-    
-    if (table === 'transactions') {
-        if (insertPayload.accountId) {
-            insertPayload.account_id = insertPayload.accountId;
-            delete insertPayload.accountId;
-        }
-    }
-    
-    if (table === 'accounts') {
-        if (insertPayload.initialBalance) {
-            insertPayload.initial_balance = insertPayload.initialBalance;
-            delete insertPayload.initialBalance;
-        }
-    }
-    
-    if (user && user.id && user.id !== 'demo-user') insertPayload.user_id = user.id;
-    
-    const { data: inserted, error } = await client.from(table).insert([insertPayload]).select().single();
-    if (error) throw error;
-    setter(prev => [inserted, ...prev]);
-    return inserted;
-  };
-
-  const adoptOrphanData = async () => {
-      if (!supabaseAdmin || !user || isDemo || user.id === 'demo-user') return 0;
-      const tables = ['assets', 'transactions', 'trades', 'dividends', 'accounts'];
-      let count = 0;
-      for (const t of tables) {
-          const { data } = await supabaseAdmin.from(t).select('id').is('user_id', null);
-          if (data && data.length > 0) {
-              const ids = data.map(i => i.id);
-              const { error } = await supabaseAdmin.from(t).update({ user_id: user.id }).in('id', ids);
-              if (!error) count += ids.length;
-          }
-      }
-      if (count > 0) await loadDatabaseData(false);
-      return count;
-  };
-
-  const updateItem = async (table: string, id: string, data: any) => {
-    if (isMock) return;
-    const client = supabaseAdmin || supabase;
-    
-    const updatePayload = { ...data };
-    
-    if (table === 'assets' && updatePayload.type) {
-      updatePayload.type = normalizeAssetType(updatePayload.type);
-      if (!ALLOWED_ASSET_TYPES.includes(updatePayload.type)) {
-        updatePayload.type = 'ACAO';
-      }
-    }
-    
-    const { error } = await client
-      .from(table)
-      .update(updatePayload)
-      .eq('id', id);
-    
-    if (error) {
-      console.error("Erro ao atualizar:", error.message);
-      throw new Error(error.message);
-    }
-    
-    await loadDatabaseData(false);
-  };
+  }, [isConfigured]);
 
   useEffect(() => {
-    if ((user || isDemo) && isInitialMount.current) {
-      loadDatabaseData();
-    }
-  }, [user, isDemo]);
+    fetchData();
+  }, [fetchData]);
 
-  const portfolio = useMemo(() => {
-    const positions: Record<string, any> = {};
-    trades.forEach(trade => {
-      if (!trade.assetId) return;
-      if (!positions[trade.assetId]) positions[trade.assetId] = { quantity: 0, totalCost: 0 };
-      const pos = positions[trade.assetId];
-      const qty = Number(trade.quantity) || 0;
-      const price = Number(trade.price) || 0;
-      const fees = Number(trade.fees) || 0;
-      const totalTrade = (qty * price) + fees;
-      if (trade.type === 'COMPRA') { pos.totalCost += totalTrade; pos.quantity += qty; }
-      else if (trade.type === 'VENDA') { const avg = pos.quantity > 0 ? pos.totalCost / pos.quantity : 0; pos.totalCost -= (qty * avg); pos.quantity -= qty; }
-    });
-    return assets.map(asset => {
-      let pos = positions[asset.id!] || { 
-        quantity: Number(asset.quantity || 0), 
-        totalCost: Number(asset.quantity || 0) * Number(asset.avg_price || 0) 
-      };
-      const currentPrice = asset.lastPrice || 100;
-      const marketValue = pos.quantity * currentPrice;
-      const gainLoss = marketValue - pos.totalCost;
-      const gainLossPerc = pos.totalCost > 0 ? (gainLoss / pos.totalCost) * 100 : 0;
-      return { 
-        ...asset, 
-        quantity: pos.quantity, 
-        avgPrice: pos.quantity > 0 ? pos.totalCost / pos.quantity : 0, 
-        marketValue, 
-        gainLoss, 
-        gainLossPerc, 
-        currentPrice 
-      };
-    }).filter(p => p.quantity > 0) as PortfolioPosition[];
-  }, [assets, trades]);
-
-  const value = {
-    user, loading, transactions, assets, trades, dividends, portfolio, accounts,
-    addTransaction: (data: any) => handleAdd('transactions', data, setTransactions),
-    addAsset: (data: any) => handleAdd('assets', data, setAssets),
-    addTrade: (data: any) => handleAdd('trades', data, setTrades),
-    addDividend: (data: any) => handleAdd('dividends', data, setDividends),
-    addAccount: (data: any) => handleAdd('accounts', data, setAccounts),
-    bulkInsert,
-    updateItem,
-    deleteItem: async (table: string, id: string) => {
-        const client = supabaseAdmin || supabase;
-        const { error } = await client.from(table).delete().eq('id', id);
-        if (error) {
-            console.error("Erro ao deletar:", error.message);
-            return;
-        }
-        await loadDatabaseData(false);
-    },
-    refreshData: () => loadDatabaseData(false),
-    loadDatabaseData,
-    getDbCounts: async () => ({}),
-    adoptOrphanData,
-    isDemo
+  const addAccount = async (account: Account) => {
+    const { data, error } = await supabase.from('accounts').insert([account]).select();
+    if (error) throw error;
+    if (data) setAccounts(prev => [...prev, ...data]);
   };
 
-  return <FinanceContext.Provider value={value}>{children}</FinanceContext.Provider>;
-};
+  const addTransaction = async (transaction: Transaction) => {
+    const { data, error } = await supabase.from('transactions').insert([transaction]).select();
+    if (error) throw error;
+    if (data) setTransactions(prev => [...prev, ...data]);
+  };
 
-export const useFinance = () => {
-  const context = useContext(FinanceContext);
-  if (!context) throw new Error("useFinance must be used within a FinanceProvider");
-  return context;
+  const addAsset = async (asset: Asset) => {
+    const { data, error } = await supabase.from('assets').insert([asset]).select();
+    if (error) throw error;
+    if (data) setAssets(prev => [...prev, ...data]);
+  };
+
+  const updateAsset = async (id: string, asset: Partial<Asset>) => {
+    const { data, error } = await supabase.from('assets').update(asset).eq('id', id).select();
+    if (error) throw error;
+    if (data) {
+      setAssets(prev => prev.map(a => a.id === id ? { ...a, ...data[0] } : a));
+    }
+  };
+
+  const addTrade = async (trade: Trade) => {
+    const { data, error } = await supabase.from('trades').insert([trade]).select();
+    if (error) throw error;
+    if (data) setTrades(prev => [...prev, ...data]);
+  };
+
+  const addDividend = async (dividend: Dividend) => {
+    const { data, error } = await supabase.from('dividends').insert([dividend]).select();
+    if (error) throw error;
+    if (data) setDividends(prev => [...prev, ...data]);
+  };
+
+  const deleteItem = async (table: string, id: string) => {
+    const { error } = await supabase.from(table).delete().eq('id', id);
+    if (error) throw error;
+
+    switch (table) {
+      case 'accounts':
+        setAccounts(prev => prev.filter(item => item.id !== id));
+        break;
+      case 'transactions':
+        setTransactions(prev => prev.filter(item => item.id !== id));
+        break;
+      case 'assets':
+        setAssets(prev => prev.filter(item => item.id !== id));
+        break;
+      case 'trades':
+        setTrades(prev => prev.filter(item => item.id !== id));
+        break;
+      case 'dividends':
+        setDividends(prev => prev.filter(item => item.id !== id));
+        break;
+    }
+  };
+
+  const bulkInsert = async (table: string, items: any[]): Promise<number> => {
+    if (items.length === 0) return 0;
+
+    const { data, error } = await supabase.from(table).insert(items).select();
+    if (error) throw error;
+
+    const insertedCount = data?.length || 0;
+
+    if (data) {
+      switch (table) {
+        case 'dividends':
+          setDividends(prev => [...prev, ...data]);
+          break;
+        case 'trades':
+          setTrades(prev => [...prev, ...data]);
+          break;
+        case 'assets':
+          setAssets(prev => [...prev, ...data]);
+          break;
+        case 'transactions':
+          setTransactions(prev => [...prev, ...data]);
+          break;
+        case 'accounts':
+          setAccounts(prev => [...prev, ...data]);
+          break;
+      }
+    }
+
+    return insertedCount;
+  };
+
+  const refreshData = async () => {
+    await fetchData();
+  };
+
+  return (
+    <FinanceContext.Provider
+      value={{
+        accounts,
+        transactions,
+        assets,
+        trades,
+        dividends,
+        loading,
+        error,
+        isConfigured,
+        addAccount,
+        addTransaction,
+        addAsset,
+        updateAsset,
+        addTrade,
+        addDividend,
+        deleteItem,
+        bulkInsert,
+        refreshData
+      }}
+    >
+      {children}
+    </FinanceContext.Provider>
+  );
 };
