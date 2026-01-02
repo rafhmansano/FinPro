@@ -1,35 +1,18 @@
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
-import { supabase, supabaseAdmin } from './services';
-import { Asset } from './types';
+// Credenciais do Supabase (públicas - seguro para frontend)
+const SUPABASE_URL = 'https://vdxrrqknfgwfajfxncei.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZkeHJycWtuZmd3ZmFqZnhuY2VpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTg1ODQ2NjcsImV4cCI6MjA3NDE2MDY2N30.FRueGvrSYp8A1q5iTI_4O_APp0av1A85VzyCgudbhMM';
 
-export const carregarAtivos = async (): Promise<Asset[]> => {
-  console.group("🔑 [Supabase] carregarAtivos");
-  const startTime = performance.now();
-  
-  try {
-    const client = supabaseAdmin || supabase;
-    if (supabaseAdmin) console.log("🛡️ Usando supabaseAdmin (Bypass RLS)...");
-    else console.warn("🔓 Usando supabase padrão (Sujeito a RLS)...");
+// Cria o cliente Supabase
+export const supabase: SupabaseClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-    const { data, error, status } = await client
-      .from('assets')
-      .select('*')
-      .order('created_at', { ascending: false });
+// Funções auxiliares para verificar conexão
+export const getSupabaseUrl = (): string => SUPABASE_URL;
+export const isSupabaseConfigured = (): boolean => true;
 
-    if (error) {
-      console.error("❌ Erro na consulta:", error.message);
-      console.groupEnd();
-      throw error;
-    }
-
-    const duration = (performance.now() - startTime).toFixed(2);
-    console.log(`✅ Sucesso em ${duration}ms. Registros: ${data?.length || 0}`);
-    console.groupEnd();
-    return data || [];
-
-  } catch (err) {
-    console.error("💥 Falha no fetch:", err);
-    console.groupEnd();
-    throw err;
-  }
+// Exporta as credenciais para uso em outros lugares se necessário
+export const SUPABASE_CONFIG = {
+  url: SUPABASE_URL,
+  anonKey: SUPABASE_ANON_KEY
 };
