@@ -22,7 +22,7 @@ const AppContent = () => {
   if (!user) return (
     <div className="min-h-screen flex items-center justify-center bg-slate-950">
       <div className="text-center">
-        <h1 className="text-5xl font-extrabold text-white mb-4 tracking-tighter">Fin<span className="text-blue-600">B3</span> Pro</h1>
+        <h1 className="text-5xl font-extrabold text-white mb-4 tracking-tighter">FinPro</h1>
         <p className="text-slate-400 mb-8 font-light">Inteligência Financeira de Nova Geração</p>
         <div className="flex flex-col items-center gap-3">
             <div className="w-6 h-6 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
