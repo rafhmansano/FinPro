@@ -1,6 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, ReactNode } from 'react';
 import { supabase, isSupabaseConfigured } from './supabase';
-import QuoteService, { Quote } from './quoteService';
 
 // Types
 export interface Account {
@@ -59,6 +58,14 @@ export interface Dividend {
   total_value?: number;
   totalValue?: number;
   user_id?: string;
+}
+
+export interface Quote {
+  ticker: string;
+  price: number;
+  change?: number;
+  change_percent?: number;
+  updated_at?: string;
 }
 
 export interface PortfolioPosition {
@@ -132,6 +139,29 @@ export const FinanceProvider: React.FC<FinanceProviderProps> = ({ children }) =>
   const [user] = useState<{ id: string; email?: string } | null>({ id: 'local-user', email: 'usuario@finpro.app' });
   const isDemo = !isConfigured;
 
+  // Função auxiliar para buscar cotações da API brapi.dev
+  const fetchQuoteFromAPI = async (ticker: string): Promise<Quote | null> => {
+    try {
+      const response = await fetch(`https://brapi.dev/api/quote/${ticker}`);
+      if (!response.ok) return null;
+      
+      const data = await response.json();
+      if (!data.results || data.results.length === 0) return null;
+      
+      const result = data.results[0];
+      return {
+        ticker: result.symbol,
+        price: result.regularMarketPrice || 0,
+        change: result.regularMarketChange || 0,
+        change_percent: result.regularMarketChangePercent || 0,
+        updated_at: new Date().toISOString()
+      };
+    } catch (error) {
+      console.error(`Erro ao buscar ${ticker}:`, error);
+      return null;
+    }
+  };
+
   // Calcula portfolio baseado em trades, assets e cotações
   const portfolio = useMemo(() => {
     const positions: Record<string, { quantity: number; totalCost: number }> = {};
@@ -169,7 +199,7 @@ export const FinanceProvider: React.FC<FinanceProviderProps> = ({ children }) =>
         const quote = quotes.get(ticker);
         
         const avgPrice = pos.quantity > 0 ? pos.totalCost / pos.quantity : 0;
-        const currentPrice = quote?.price || avgPrice; // Usa cotação ou preço médio
+        const currentPrice = quote?.price || avgPrice;
         const marketValue = pos.quantity * currentPrice;
         const totalCost = pos.totalCost;
         const gainLoss = marketValue - totalCost;
@@ -224,11 +254,17 @@ export const FinanceProvider: React.FC<FinanceProviderProps> = ({ children }) =>
       setTrades(tradesRes.data || []);
       setDividends(dividendsRes.data || []);
 
-      // Carrega cotações do banco
-      const dbQuotes = await QuoteService.getAllQuotesFromDB();
-      const quotesMap = new Map<string, Quote>();
-      dbQuotes.forEach(q => quotesMap.set(q.ticker, q));
-      setQuotes(quotesMap);
+      // Tenta carregar cotações do banco (se a tabela existir)
+      try {
+        const { data: quotesData } = await supabase.from('quotes').select('*');
+        if (quotesData) {
+          const quotesMap = new Map<string, Quote>();
+          quotesData.forEach((q: any) => quotesMap.set(q.ticker, q));
+          setQuotes(quotesMap);
+        }
+      } catch (e) {
+        console.log('Tabela quotes ainda não criada');
+      }
 
     } catch (err: any) {
       console.error('Fetch error:', err);
@@ -339,14 +375,14 @@ export const FinanceProvider: React.FC<FinanceProviderProps> = ({ children }) =>
   };
 
   /**
-   * Atualiza cotações dos ativos
-   * Se tickers não for fornecido, atualiza todos os ativos da carteira (exceto RENDA_FIXA)
+   * Atualiza cotações dos ativos (versão simplificada inline)
    */
   const updateQuotes = async (tickers?: string[]): Promise<{ success: number; failed: number }> => {
     setQuotesLoading(true);
+    let success = 0;
+    let failed = 0;
     
     try {
-      // Se não especificou tickers, usa todos os ativos (exceto RENDA_FIXA)
       const tickersToUpdate = tickers || assets
         .filter(a => a.type !== 'RENDA_FIXA' && a.ticker)
         .map(a => a.ticker);
@@ -355,15 +391,65 @@ export const FinanceProvider: React.FC<FinanceProviderProps> = ({ children }) =>
         return { success: 0, failed: 0 };
       }
 
-      const result = await QuoteService.updateQuotes(tickersToUpdate);
+      const newQuotes = new Map(quotes);
 
-      // Atualiza state com novas cotações
-      const updatedQuotes = await QuoteService.getAllQuotesFromDB();
-      const quotesMap = new Map<string, Quote>();
-      updatedQuotes.forEach(q => quotesMap.set(q.ticker, q));
-      setQuotes(quotesMap);
+      // Busca cotações em lotes de 10
+      for (let i = 0; i < tickersToUpdate.length; i += 10) {
+        const batch = tickersToUpdate.slice(i, i + 10);
+        const tickersParam = batch.join(',');
+        
+        try {
+          const response = await fetch(`https://brapi.dev/api/quote/${tickersParam}`);
+          if (!response.ok) {
+            failed += batch.length;
+            continue;
+          }
 
-      return result;
+          const data = await response.json();
+          if (data.results && Array.isArray(data.results)) {
+            for (const result of data.results) {
+              const quote: Quote = {
+                ticker: result.symbol,
+                price: result.regularMarketPrice || 0,
+                change: result.regularMarketChange || 0,
+                change_percent: result.regularMarketChangePercent || 0,
+                updated_at: new Date().toISOString()
+              };
+              
+              newQuotes.set(result.symbol, quote);
+              success++;
+
+              // Tenta salvar no banco (se a tabela existir)
+              try {
+                const { data: existing } = await supabase
+                  .from('quotes')
+                  .select('id')
+                  .eq('ticker', quote.ticker)
+                  .single();
+
+                if (existing) {
+                  await supabase.from('quotes').update(quote).eq('ticker', quote.ticker);
+                } else {
+                  await supabase.from('quotes').insert([quote]);
+                }
+              } catch (e) {
+                // Tabela quotes pode não existir ainda
+              }
+            }
+          }
+        } catch (error) {
+          console.error(`Erro no batch ${i}:`, error);
+          failed += batch.length;
+        }
+        
+        if (i + 10 < tickersToUpdate.length) {
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+      }
+
+      setQuotes(newQuotes);
+      return { success, failed };
+      
     } catch (error) {
       console.error('Erro ao atualizar cotações:', error);
       return { success: 0, failed: tickers?.length || assets.length };
@@ -372,9 +458,6 @@ export const FinanceProvider: React.FC<FinanceProviderProps> = ({ children }) =>
     }
   };
 
-  /**
-   * Obtém cotação de um ticker específico
-   */
   const getQuote = (ticker: string): Quote | null => {
     return quotes.get(ticker.toUpperCase()) || null;
   };
