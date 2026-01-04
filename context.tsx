@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, ReactNode } from 'react';
 import { supabase, isSupabaseConfigured } from './supabase';
+import QuoteService, { Quote } from './quoteService';
 
 // Types
 export interface Account {
@@ -33,6 +34,8 @@ export interface Asset {
   type: string;
   sector?: string;
   currency?: string;
+  quantity?: number;
+  avg_price?: number;
   user_id?: string;
 }
 
@@ -65,8 +68,13 @@ export interface PortfolioPosition {
   type: string;
   quantity: number;
   avgPrice: number;
-  totalValue: number;
+  currentPrice: number;
+  marketValue: number;
+  totalCost: number;
+  gainLoss: number;
+  gainLossPercent: number;
   currency: string;
+  lastUpdate?: string;
 }
 
 interface FinanceContextType {
@@ -75,8 +83,10 @@ interface FinanceContextType {
   assets: Asset[];
   trades: Trade[];
   dividends: Dividend[];
+  quotes: Map<string, Quote>;
   portfolio: PortfolioPosition[];
   loading: boolean;
+  quotesLoading: boolean;
   error: string | null;
   isConfigured: boolean;
   isDemo: boolean;
@@ -90,6 +100,8 @@ interface FinanceContextType {
   deleteItem: (table: string, id: string) => Promise<void>;
   bulkInsert: (table: string, items: any[]) => Promise<number>;
   refreshData: () => Promise<void>;
+  updateQuotes: (tickers?: string[]) => Promise<{ success: number; failed: number }>;
+  getQuote: (ticker: string) => Quote | null;
 }
 
 const FinanceContext = createContext<FinanceContextType | undefined>(undefined);
@@ -112,13 +124,15 @@ export const FinanceProvider: React.FC<FinanceProviderProps> = ({ children }) =>
   const [assets, setAssets] = useState<Asset[]>([]);
   const [trades, setTrades] = useState<Trade[]>([]);
   const [dividends, setDividends] = useState<Dividend[]>([]);
+  const [quotes, setQuotes] = useState<Map<string, Quote>>(new Map());
   const [loading, setLoading] = useState(true);
+  const [quotesLoading, setQuotesLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isConfigured] = useState(isSupabaseConfigured());
   const [user] = useState<{ id: string; email?: string } | null>({ id: 'local-user', email: 'usuario@finpro.app' });
   const isDemo = !isConfigured;
 
-  // Calcula portfolio baseado em trades e assets
+  // Calcula portfolio baseado em trades, assets e cotações
   const portfolio = useMemo(() => {
     const positions: Record<string, { quantity: number; totalCost: number }> = {};
     
@@ -139,7 +153,6 @@ export const FinanceProvider: React.FC<FinanceProviderProps> = ({ children }) =>
         positions[ticker].totalCost += qty * price;
       } else if (tradeType === 'SELL' || tradeType === 'VENDA') {
         positions[ticker].quantity -= qty;
-        // Ajusta custo proporcionalmente
         if (positions[ticker].quantity > 0) {
           const avgPrice = positions[ticker].totalCost / (positions[ticker].quantity + qty);
           positions[ticker].totalCost = positions[ticker].quantity * avgPrice;
@@ -153,7 +166,15 @@ export const FinanceProvider: React.FC<FinanceProviderProps> = ({ children }) =>
       .filter(([_, pos]) => pos.quantity > 0)
       .map(([ticker, pos]) => {
         const asset = assets.find(a => a.ticker?.toUpperCase() === ticker);
+        const quote = quotes.get(ticker);
+        
         const avgPrice = pos.quantity > 0 ? pos.totalCost / pos.quantity : 0;
+        const currentPrice = quote?.price || avgPrice; // Usa cotação ou preço médio
+        const marketValue = pos.quantity * currentPrice;
+        const totalCost = pos.totalCost;
+        const gainLoss = marketValue - totalCost;
+        const gainLossPercent = totalCost > 0 ? (gainLoss / totalCost) * 100 : 0;
+        
         return {
           id: asset?.id || ticker,
           ticker,
@@ -161,12 +182,17 @@ export const FinanceProvider: React.FC<FinanceProviderProps> = ({ children }) =>
           type: asset?.type || 'ACAO',
           quantity: pos.quantity,
           avgPrice,
-          totalValue: pos.quantity * avgPrice,
-          currency: asset?.currency || (ticker === 'TFLO' ? 'USD' : 'BRL')
+          currentPrice,
+          marketValue,
+          totalCost,
+          gainLoss,
+          gainLossPercent,
+          currency: asset?.currency || (ticker === 'TFLO' ? 'USD' : 'BRL'),
+          lastUpdate: quote?.updated_at
         };
       })
-      .sort((a, b) => b.totalValue - a.totalValue);
-  }, [trades, assets]);
+      .sort((a, b) => b.marketValue - a.marketValue);
+  }, [trades, assets, quotes]);
 
   const fetchData = useCallback(async () => {
     if (!isConfigured) {
@@ -197,6 +223,13 @@ export const FinanceProvider: React.FC<FinanceProviderProps> = ({ children }) =>
       setAssets(assetsRes.data || []);
       setTrades(tradesRes.data || []);
       setDividends(dividendsRes.data || []);
+
+      // Carrega cotações do banco
+      const dbQuotes = await QuoteService.getAllQuotesFromDB();
+      const quotesMap = new Map<string, Quote>();
+      dbQuotes.forEach(q => quotesMap.set(q.ticker, q));
+      setQuotes(quotesMap);
+
     } catch (err: any) {
       console.error('Fetch error:', err);
       setError(err.message || 'Erro ao carregar dados');
@@ -305,6 +338,47 @@ export const FinanceProvider: React.FC<FinanceProviderProps> = ({ children }) =>
     await fetchData();
   };
 
+  /**
+   * Atualiza cotações dos ativos
+   * Se tickers não for fornecido, atualiza todos os ativos da carteira (exceto RENDA_FIXA)
+   */
+  const updateQuotes = async (tickers?: string[]): Promise<{ success: number; failed: number }> => {
+    setQuotesLoading(true);
+    
+    try {
+      // Se não especificou tickers, usa todos os ativos (exceto RENDA_FIXA)
+      const tickersToUpdate = tickers || assets
+        .filter(a => a.type !== 'RENDA_FIXA' && a.ticker)
+        .map(a => a.ticker);
+
+      if (tickersToUpdate.length === 0) {
+        return { success: 0, failed: 0 };
+      }
+
+      const result = await QuoteService.updateQuotes(tickersToUpdate);
+
+      // Atualiza state com novas cotações
+      const updatedQuotes = await QuoteService.getAllQuotesFromDB();
+      const quotesMap = new Map<string, Quote>();
+      updatedQuotes.forEach(q => quotesMap.set(q.ticker, q));
+      setQuotes(quotesMap);
+
+      return result;
+    } catch (error) {
+      console.error('Erro ao atualizar cotações:', error);
+      return { success: 0, failed: tickers?.length || assets.length };
+    } finally {
+      setQuotesLoading(false);
+    }
+  };
+
+  /**
+   * Obtém cotação de um ticker específico
+   */
+  const getQuote = (ticker: string): Quote | null => {
+    return quotes.get(ticker.toUpperCase()) || null;
+  };
+
   return (
     <FinanceContext.Provider
       value={{
@@ -313,8 +387,10 @@ export const FinanceProvider: React.FC<FinanceProviderProps> = ({ children }) =>
         assets,
         trades,
         dividends,
+        quotes,
         portfolio,
         loading,
+        quotesLoading,
         error,
         isConfigured,
         isDemo,
@@ -327,7 +403,9 @@ export const FinanceProvider: React.FC<FinanceProviderProps> = ({ children }) =>
         addDividend,
         deleteItem,
         bulkInsert,
-        refreshData
+        refreshData,
+        updateQuotes,
+        getQuote
       }}
     >
       {children}
