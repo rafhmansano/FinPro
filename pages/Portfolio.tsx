@@ -102,7 +102,8 @@ export const Portfolio = () => {
     const totals: Record<string, { BRL: number; USD: number }> = {
       ACAO: { BRL: 0, USD: 0 },
       FII: { BRL: 0, USD: 0 },
-      ETF: { BRL: 0, USD: 0 }
+      ETF: { BRL: 0, USD: 0 },
+      RENDA_FIXA: { BRL: 0, USD: 0 }
     };
     
     activePositions.forEach(a => {
@@ -135,7 +136,8 @@ export const Portfolio = () => {
     return [
       { name: 'Ações', value: totalsByType.ACAO.BRL, color: COLORS.primary },
       { name: 'FIIs', value: totalsByType.FII.BRL, color: COLORS.warning },
-      { name: 'ETFs (BRL)', value: totalsByType.ETF.BRL, color: COLORS.accent }
+      { name: 'ETFs (BRL)', value: totalsByType.ETF.BRL, color: COLORS.accent },
+      { name: 'Renda Fixa', value: totalsByType.RENDA_FIXA.BRL, color: COLORS.success }
     ].filter(d => d.value > 0);
   }, [totalsByType]);
 
@@ -257,6 +259,7 @@ export const Portfolio = () => {
             <option value="ACAO">Ações</option>
             <option value="FII">FIIs</option>
             <option value="ETF">ETFs</option>
+            <option value="RENDA_FIXA">Renda Fixa</option>
           </select>
         </div>
       </div>
@@ -350,9 +353,10 @@ export const Portfolio = () => {
                     <span className={`text-xs px-2 py-1 rounded font-bold ${
                       asset.type === 'ACAO' ? 'bg-blue-500/10 text-blue-400' :
                       asset.type === 'FII' ? 'bg-amber-500/10 text-amber-400' :
+                      asset.type === 'RENDA_FIXA' ? 'bg-emerald-500/10 text-emerald-400' :
                       'bg-purple-500/10 text-purple-400'
                     }`}>
-                      {asset.type}
+                      {asset.type === 'RENDA_FIXA' ? 'RF' : asset.type}
                     </span>
                   </td>
                   <td className="p-4">
@@ -424,6 +428,7 @@ export const Portfolio = () => {
             <option value="ACAO">Ação</option>
             <option value="FII">FII</option>
             <option value="ETF">ETF</option>
+            <option value="RENDA_FIXA">Renda Fixa</option>
           </Select>
           
           <Select label="Moeda" name="currency" defaultValue={editingAsset?.currency || 'BRL'}>
