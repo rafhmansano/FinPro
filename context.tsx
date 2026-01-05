@@ -98,6 +98,8 @@ interface FinanceContextType {
   isConfigured: boolean;
   isDemo: boolean;
   user: { id: string; email?: string } | null;
+  brapiApiKey: string | null;
+  setBrapiApiKey: (key: string) => void;
   addAccount: (account: Account) => Promise<void>;
   addTransaction: (transaction: Transaction) => Promise<void>;
   addAsset: (asset: Asset) => Promise<void>;
@@ -137,7 +139,15 @@ export const FinanceProvider: React.FC<FinanceProviderProps> = ({ children }) =>
   const [error, setError] = useState<string | null>(null);
   const [isConfigured] = useState(isSupabaseConfigured());
   const [user] = useState<{ id: string; email?: string } | null>({ id: 'local-user', email: 'usuario@finpro.app' });
+  const [brapiApiKey, setBrapiApiKeyState] = useState<string | null>(() => {
+    return localStorage.getItem('brapi_api_key') || null;
+  });
   const isDemo = !isConfigured;
+
+  const setBrapiApiKey = (key: string) => {
+    localStorage.setItem('brapi_api_key', key);
+    setBrapiApiKeyState(key);
+  };
 
   // Calcula portfolio com MÚLTIPLAS ESTRATÉGIAS para garantir que funcione
   const portfolio = useMemo(() => {
@@ -180,13 +190,13 @@ export const FinanceProvider: React.FC<FinanceProviderProps> = ({ children }) =>
           lastUpdate: quote?.updated_at
         });
         
-        console.log(`✅ [ASSET] ${ticker}: qty=${qty}, pm=R$${avgPrice.toFixed(2)}, total=R$${marketValue.toFixed(2)}`);
+        console.log(`✅ [ASSET] ${ticker}: qty=${qty}, pm=R$${avgPrice.toFixed(2)}, atual=R$${currentPrice.toFixed(2)}, total=R$${marketValue.toFixed(2)}`);
       }
     });
     
     console.log(`📊 Estratégia 1 (Assets): ${portfolioMap.size} posições`);
     
-    // ESTRATÉGIA 2: Calcular dos Trades (para tickers que não estão nos assets OU para verificar)
+    // ESTRATÉGIA 2: Calcular dos Trades (para tickers que não estão nos assets)
     const tradesPositions = new Map<string, { quantity: number; totalCost: number }>();
     
     trades.forEach(trade => {
@@ -205,7 +215,6 @@ export const FinanceProvider: React.FC<FinanceProviderProps> = ({ children }) =>
       if (type === 'BUY' || type === 'COMPRA') {
         pos.quantity += qty;
         pos.totalCost += qty * price;
-        console.log(`  📈 [TRADE] ${ticker}: +${qty} @ R$${price} = R$${(qty*price).toFixed(2)}`);
       } else if (type === 'SELL' || type === 'VENDA') {
         const avgPrice = pos.quantity > 0 ? pos.totalCost / pos.quantity : 0;
         pos.quantity -= qty;
@@ -215,7 +224,6 @@ export const FinanceProvider: React.FC<FinanceProviderProps> = ({ children }) =>
           pos.quantity = 0;
           pos.totalCost = 0;
         }
-        console.log(`  📉 [TRADE] ${ticker}: -${qty} @ R$${price}`);
       }
     });
     
@@ -269,10 +277,7 @@ export const FinanceProvider: React.FC<FinanceProviderProps> = ({ children }) =>
     
     if (finalPortfolio.length === 0) {
       console.warn('⚠️ ATENÇÃO: Portfolio vazio!');
-      console.warn('Verifique se:');
-      console.warn('1. Tabela assets tem registros com quantity > 0');
-      console.warn('2. Tabela trades tem registros tipo BUY/COMPRA');
-      console.warn('3. Os dados foram carregados corretamente');
+      console.warn('Verifique se a tabela assets tem registros com quantity > 0');
     }
     
     return finalPortfolio;
@@ -304,43 +309,21 @@ export const FinanceProvider: React.FC<FinanceProviderProps> = ({ children }) =>
       if (tradesRes.error) console.error('❌ Trades error:', tradesRes.error);
       if (dividendsRes.error) console.error('❌ Dividends error:', dividendsRes.error);
 
-      const loadedAccounts = accountsRes.data || [];
-      const loadedTransactions = transactionsRes.data || [];
       const loadedAssets = assetsRes.data || [];
       const loadedTrades = tradesRes.data || [];
-      const loadedDividends = dividendsRes.data || [];
 
-      setAccounts(loadedAccounts);
-      setTransactions(loadedTransactions);
+      setAccounts(accountsRes.data || []);
+      setTransactions(transactionsRes.data || []);
       setAssets(loadedAssets);
       setTrades(loadedTrades);
-      setDividends(loadedDividends);
+      setDividends(dividendsRes.data || []);
 
       console.log('=== 📦 DADOS CARREGADOS ===');
-      console.log('Accounts:', loadedAccounts.length);
-      console.log('Transactions:', loadedTransactions.length);
-      console.log('Assets:', loadedAssets.length, loadedAssets.length > 0 ? `(primeiro: ${loadedAssets[0]?.ticker})` : '');
-      console.log('Trades:', loadedTrades.length, loadedTrades.length > 0 ? `(primeiro: ${loadedTrades[0]?.ticker})` : '');
-      console.log('Dividends:', loadedDividends.length);
+      console.log('Assets:', loadedAssets.length);
+      console.log('Trades:', loadedTrades.length);
       console.log('==========================');
 
-      // Mostra amostra dos assets
-      if (loadedAssets.length > 0) {
-        console.log('📋 Amostra de Assets:');
-        loadedAssets.slice(0, 3).forEach(a => {
-          console.log(`  ${a.ticker}: qty=${a.quantity}, avg_price=${a.avg_price}`);
-        });
-      }
-
-      // Mostra amostra dos trades
-      if (loadedTrades.length > 0) {
-        console.log('📋 Amostra de Trades:');
-        loadedTrades.slice(0, 3).forEach(t => {
-          console.log(`  ${t.ticker}: ${t.type} qty=${t.quantity} @ ${t.price}`);
-        });
-      }
-
-      // Tenta carregar cotações do banco (se a tabela existir)
+      // Tenta carregar cotações do banco
       try {
         const { data: quotesData } = await supabase.from('quotes').select('*');
         if (quotesData) {
@@ -350,7 +333,7 @@ export const FinanceProvider: React.FC<FinanceProviderProps> = ({ children }) =>
           console.log('💱 Cotações carregadas:', quotesData.length);
         }
       } catch (e) {
-        console.log('ℹ️ Tabela quotes não existe (normal na primeira vez)');
+        console.log('ℹ️ Tabela quotes não existe');
       }
 
     } catch (err: any) {
@@ -467,6 +450,12 @@ export const FinanceProvider: React.FC<FinanceProviderProps> = ({ children }) =>
     let failed = 0;
     
     try {
+      if (!brapiApiKey) {
+        console.error('❌ API Key não configurada!');
+        alert('⚠️ Configure sua API Key da brapi.dev primeiro!\n\nClique em "Configurar API" no menu.');
+        return { success: 0, failed: 0 };
+      }
+
       const tickersToUpdate = tickers || assets
         .filter(a => a.type !== 'RENDA_FIXA' && a.ticker)
         .map(a => a.ticker);
@@ -487,8 +476,17 @@ export const FinanceProvider: React.FC<FinanceProviderProps> = ({ children }) =>
         console.log(`📡 Buscando batch ${Math.floor(i/10) + 1}:`, batch);
         
         try {
-          const response = await fetch(`https://brapi.dev/api/quote/${tickersParam}`);
+          const response = await fetch(
+            `https://brapi.dev/api/quote/${tickersParam}?token=oNFdM2iKWkCym31wsHwDCL`
+          );
+          
           if (!response.ok) {
+            if (response.status === 401) {
+              console.error('❌ API Key inválida ou expirada');
+              alert('❌ API Key inválida!\n\nVerifique sua chave em https://brapi.dev');
+              failed += batch.length;
+              break;
+            }
             console.error(`❌ Erro HTTP ${response.status}`);
             failed += batch.length;
             continue;
@@ -568,6 +566,8 @@ export const FinanceProvider: React.FC<FinanceProviderProps> = ({ children }) =>
         isConfigured,
         isDemo,
         user,
+        brapiApiKey,
+        setBrapiApiKey,
         addAccount,
         addTransaction,
         addAsset,
