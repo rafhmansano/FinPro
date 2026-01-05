@@ -139,73 +139,101 @@ export const FinanceProvider: React.FC<FinanceProviderProps> = ({ children }) =>
   const [user] = useState<{ id: string; email?: string } | null>({ id: 'local-user', email: 'usuario@finpro.app' });
   const isDemo = !isConfigured;
 
-  // Função auxiliar para buscar cotações da API brapi.dev
-  const fetchQuoteFromAPI = async (ticker: string): Promise<Quote | null> => {
-    try {
-      const response = await fetch(`https://brapi.dev/api/quote/${ticker}`);
-      if (!response.ok) return null;
-      
-      const data = await response.json();
-      if (!data.results || data.results.length === 0) return null;
-      
-      const result = data.results[0];
-      return {
-        ticker: result.symbol,
-        price: result.regularMarketPrice || 0,
-        change: result.regularMarketChange || 0,
-        change_percent: result.regularMarketChangePercent || 0,
-        updated_at: new Date().toISOString()
-      };
-    } catch (error) {
-      console.error(`Erro ao buscar ${ticker}:`, error);
-      return null;
-    }
-  };
-
-  // Calcula portfolio baseado em trades, assets e cotações
+  // Calcula portfolio com MÚLTIPLAS ESTRATÉGIAS para garantir que funcione
   const portfolio = useMemo(() => {
-    const positions: Record<string, { quantity: number; totalCost: number }> = {};
+    console.log('=== 🔄 RECALCULANDO PORTFOLIO ===');
+    console.log('📊 Total de Assets:', assets.length);
+    console.log('📈 Total de Trades:', trades.length);
+    console.log('💱 Total de Quotes:', quotes.size);
+    
+    const portfolioMap = new Map<string, PortfolioPosition>();
+    
+    // ESTRATÉGIA 1: Assets com quantity > 0 (dados diretos)
+    assets.forEach(asset => {
+      const ticker = asset.ticker?.toUpperCase();
+      if (!ticker) return;
+      
+      const qty = Number(asset.quantity) || 0;
+      const avgPrice = Number(asset.avg_price) || 0;
+      
+      if (qty > 0 && avgPrice > 0) {
+        const quote = quotes.get(ticker);
+        const currentPrice = quote?.price || avgPrice;
+        const totalCost = qty * avgPrice;
+        const marketValue = qty * currentPrice;
+        const gainLoss = marketValue - totalCost;
+        const gainLossPercent = totalCost > 0 ? (gainLoss / totalCost) * 100 : 0;
+        
+        portfolioMap.set(ticker, {
+          id: asset.id || ticker,
+          ticker,
+          name: asset.name || ticker,
+          type: asset.type || 'ACAO',
+          quantity: qty,
+          avgPrice,
+          currentPrice,
+          marketValue,
+          totalCost,
+          gainLoss,
+          gainLossPercent,
+          currency: asset.currency || (ticker === 'TFLO' ? 'USD' : 'BRL'),
+          lastUpdate: quote?.updated_at
+        });
+        
+        console.log(`✅ [ASSET] ${ticker}: qty=${qty}, pm=R$${avgPrice.toFixed(2)}, total=R$${marketValue.toFixed(2)}`);
+      }
+    });
+    
+    console.log(`📊 Estratégia 1 (Assets): ${portfolioMap.size} posições`);
+    
+    // ESTRATÉGIA 2: Calcular dos Trades (para tickers que não estão nos assets OU para verificar)
+    const tradesPositions = new Map<string, { quantity: number; totalCost: number }>();
     
     trades.forEach(trade => {
       const ticker = trade.ticker?.toUpperCase();
       if (!ticker) return;
       
-      if (!positions[ticker]) {
-        positions[ticker] = { quantity: 0, totalCost: 0 };
+      if (!tradesPositions.has(ticker)) {
+        tradesPositions.set(ticker, { quantity: 0, totalCost: 0 });
       }
       
+      const pos = tradesPositions.get(ticker)!;
       const qty = Number(trade.quantity) || 0;
       const price = Number(trade.price) || 0;
-      const tradeType = (trade.type || '').toUpperCase();
+      const type = (trade.type || '').toUpperCase();
       
-      if (tradeType === 'BUY' || tradeType === 'COMPRA') {
-        positions[ticker].quantity += qty;
-        positions[ticker].totalCost += qty * price;
-      } else if (tradeType === 'SELL' || tradeType === 'VENDA') {
-        positions[ticker].quantity -= qty;
-        if (positions[ticker].quantity > 0) {
-          const avgPrice = positions[ticker].totalCost / (positions[ticker].quantity + qty);
-          positions[ticker].totalCost = positions[ticker].quantity * avgPrice;
+      if (type === 'BUY' || type === 'COMPRA') {
+        pos.quantity += qty;
+        pos.totalCost += qty * price;
+        console.log(`  📈 [TRADE] ${ticker}: +${qty} @ R$${price} = R$${(qty*price).toFixed(2)}`);
+      } else if (type === 'SELL' || type === 'VENDA') {
+        const avgPrice = pos.quantity > 0 ? pos.totalCost / pos.quantity : 0;
+        pos.quantity -= qty;
+        if (pos.quantity > 0) {
+          pos.totalCost = pos.quantity * avgPrice;
         } else {
-          positions[ticker] = { quantity: 0, totalCost: 0 };
+          pos.quantity = 0;
+          pos.totalCost = 0;
         }
+        console.log(`  📉 [TRADE] ${ticker}: -${qty} @ R$${price}`);
       }
     });
     
-    return Object.entries(positions)
-      .filter(([_, pos]) => pos.quantity > 0)
-      .map(([ticker, pos]) => {
+    console.log(`📈 Estratégia 2 (Trades): ${tradesPositions.size} tickers processados`);
+    
+    // Adiciona posições dos trades que não estão nos assets
+    tradesPositions.forEach((pos, ticker) => {
+      if (pos.quantity > 0 && !portfolioMap.has(ticker)) {
         const asset = assets.find(a => a.ticker?.toUpperCase() === ticker);
+        const avgPrice = pos.totalCost / pos.quantity;
         const quote = quotes.get(ticker);
-        
-        const avgPrice = pos.quantity > 0 ? pos.totalCost / pos.quantity : 0;
         const currentPrice = quote?.price || avgPrice;
-        const marketValue = pos.quantity * currentPrice;
         const totalCost = pos.totalCost;
+        const marketValue = pos.quantity * currentPrice;
         const gainLoss = marketValue - totalCost;
         const gainLossPercent = totalCost > 0 ? (gainLoss / totalCost) * 100 : 0;
         
-        return {
+        portfolioMap.set(ticker, {
           id: asset?.id || ticker,
           ticker,
           name: asset?.name || ticker,
@@ -219,17 +247,45 @@ export const FinanceProvider: React.FC<FinanceProviderProps> = ({ children }) =>
           gainLossPercent,
           currency: asset?.currency || (ticker === 'TFLO' ? 'USD' : 'BRL'),
           lastUpdate: quote?.updated_at
-        };
-      })
+        });
+        
+        console.log(`➕ [TRADE-ONLY] ${ticker}: qty=${pos.quantity}, pm=R$${avgPrice.toFixed(2)}, total=R$${marketValue.toFixed(2)}`);
+      }
+    });
+    
+    const finalPortfolio = Array.from(portfolioMap.values())
+      .filter(p => p.quantity > 0)
       .sort((a, b) => b.marketValue - a.marketValue);
+    
+    const totalValue = finalPortfolio.reduce((sum, p) => sum + p.marketValue, 0);
+    const totalCost = finalPortfolio.reduce((sum, p) => sum + p.totalCost, 0);
+    
+    console.log('=== ✅ PORTFOLIO FINAL ===');
+    console.log(`📊 Total de Posições: ${finalPortfolio.length}`);
+    console.log(`💰 Valor Investido: R$ ${totalCost.toFixed(2)}`);
+    console.log(`💎 Valor Atual: R$ ${totalValue.toFixed(2)}`);
+    console.log(`📈 Ganho/Perda: R$ ${(totalValue - totalCost).toFixed(2)} (${totalCost > 0 ? ((totalValue - totalCost) / totalCost * 100).toFixed(2) : 0}%)`);
+    console.log('========================');
+    
+    if (finalPortfolio.length === 0) {
+      console.warn('⚠️ ATENÇÃO: Portfolio vazio!');
+      console.warn('Verifique se:');
+      console.warn('1. Tabela assets tem registros com quantity > 0');
+      console.warn('2. Tabela trades tem registros tipo BUY/COMPRA');
+      console.warn('3. Os dados foram carregados corretamente');
+    }
+    
+    return finalPortfolio;
   }, [trades, assets, quotes]);
 
   const fetchData = useCallback(async () => {
     if (!isConfigured) {
+      console.log('ℹ️ Modo demo - Supabase não configurado');
       setLoading(false);
       return;
     }
 
+    console.log('🔄 Carregando dados do Supabase...');
     setLoading(true);
     setError(null);
 
@@ -242,17 +298,47 @@ export const FinanceProvider: React.FC<FinanceProviderProps> = ({ children }) =>
         supabase.from('dividends').select('*')
       ]);
 
-      if (accountsRes.error) console.error('Accounts error:', accountsRes.error);
-      if (transactionsRes.error) console.error('Transactions error:', transactionsRes.error);
-      if (assetsRes.error) console.error('Assets error:', assetsRes.error);
-      if (tradesRes.error) console.error('Trades error:', tradesRes.error);
-      if (dividendsRes.error) console.error('Dividends error:', dividendsRes.error);
+      if (accountsRes.error) console.error('❌ Accounts error:', accountsRes.error);
+      if (transactionsRes.error) console.error('❌ Transactions error:', transactionsRes.error);
+      if (assetsRes.error) console.error('❌ Assets error:', assetsRes.error);
+      if (tradesRes.error) console.error('❌ Trades error:', tradesRes.error);
+      if (dividendsRes.error) console.error('❌ Dividends error:', dividendsRes.error);
 
-      setAccounts(accountsRes.data || []);
-      setTransactions(transactionsRes.data || []);
-      setAssets(assetsRes.data || []);
-      setTrades(tradesRes.data || []);
-      setDividends(dividendsRes.data || []);
+      const loadedAccounts = accountsRes.data || [];
+      const loadedTransactions = transactionsRes.data || [];
+      const loadedAssets = assetsRes.data || [];
+      const loadedTrades = tradesRes.data || [];
+      const loadedDividends = dividendsRes.data || [];
+
+      setAccounts(loadedAccounts);
+      setTransactions(loadedTransactions);
+      setAssets(loadedAssets);
+      setTrades(loadedTrades);
+      setDividends(loadedDividends);
+
+      console.log('=== 📦 DADOS CARREGADOS ===');
+      console.log('Accounts:', loadedAccounts.length);
+      console.log('Transactions:', loadedTransactions.length);
+      console.log('Assets:', loadedAssets.length, loadedAssets.length > 0 ? `(primeiro: ${loadedAssets[0]?.ticker})` : '');
+      console.log('Trades:', loadedTrades.length, loadedTrades.length > 0 ? `(primeiro: ${loadedTrades[0]?.ticker})` : '');
+      console.log('Dividends:', loadedDividends.length);
+      console.log('==========================');
+
+      // Mostra amostra dos assets
+      if (loadedAssets.length > 0) {
+        console.log('📋 Amostra de Assets:');
+        loadedAssets.slice(0, 3).forEach(a => {
+          console.log(`  ${a.ticker}: qty=${a.quantity}, avg_price=${a.avg_price}`);
+        });
+      }
+
+      // Mostra amostra dos trades
+      if (loadedTrades.length > 0) {
+        console.log('📋 Amostra de Trades:');
+        loadedTrades.slice(0, 3).forEach(t => {
+          console.log(`  ${t.ticker}: ${t.type} qty=${t.quantity} @ ${t.price}`);
+        });
+      }
 
       // Tenta carregar cotações do banco (se a tabela existir)
       try {
@@ -261,13 +347,14 @@ export const FinanceProvider: React.FC<FinanceProviderProps> = ({ children }) =>
           const quotesMap = new Map<string, Quote>();
           quotesData.forEach((q: any) => quotesMap.set(q.ticker, q));
           setQuotes(quotesMap);
+          console.log('💱 Cotações carregadas:', quotesData.length);
         }
       } catch (e) {
-        console.log('Tabela quotes ainda não criada');
+        console.log('ℹ️ Tabela quotes não existe (normal na primeira vez)');
       }
 
     } catch (err: any) {
-      console.error('Fetch error:', err);
+      console.error('❌ Erro ao carregar dados:', err);
       setError(err.message || 'Erro ao carregar dados');
     } finally {
       setLoading(false);
@@ -374,9 +461,6 @@ export const FinanceProvider: React.FC<FinanceProviderProps> = ({ children }) =>
     await fetchData();
   };
 
-  /**
-   * Atualiza cotações dos ativos (versão simplificada inline)
-   */
   const updateQuotes = async (tickers?: string[]): Promise<{ success: number; failed: number }> => {
     setQuotesLoading(true);
     let success = 0;
@@ -388,19 +472,24 @@ export const FinanceProvider: React.FC<FinanceProviderProps> = ({ children }) =>
         .map(a => a.ticker);
 
       if (tickersToUpdate.length === 0) {
+        console.log('⚠️ Nenhum ticker para atualizar');
         return { success: 0, failed: 0 };
       }
 
+      console.log('🔄 Atualizando cotações de:', tickersToUpdate);
+
       const newQuotes = new Map(quotes);
 
-      // Busca cotações em lotes de 10
       for (let i = 0; i < tickersToUpdate.length; i += 10) {
         const batch = tickersToUpdate.slice(i, i + 10);
         const tickersParam = batch.join(',');
         
+        console.log(`📡 Buscando batch ${Math.floor(i/10) + 1}:`, batch);
+        
         try {
           const response = await fetch(`https://brapi.dev/api/quote/${tickersParam}`);
           if (!response.ok) {
+            console.error(`❌ Erro HTTP ${response.status}`);
             failed += batch.length;
             continue;
           }
@@ -418,8 +507,8 @@ export const FinanceProvider: React.FC<FinanceProviderProps> = ({ children }) =>
               
               newQuotes.set(result.symbol, quote);
               success++;
+              console.log(`✅ ${result.symbol}: R$ ${quote.price.toFixed(2)}`);
 
-              // Tenta salvar no banco (se a tabela existir)
               try {
                 const { data: existing } = await supabase
                   .from('quotes')
@@ -433,12 +522,12 @@ export const FinanceProvider: React.FC<FinanceProviderProps> = ({ children }) =>
                   await supabase.from('quotes').insert([quote]);
                 }
               } catch (e) {
-                // Tabela quotes pode não existir ainda
+                // Tabela pode não existir
               }
             }
           }
         } catch (error) {
-          console.error(`Erro no batch ${i}:`, error);
+          console.error(`❌ Erro no batch:`, error);
           failed += batch.length;
         }
         
@@ -448,10 +537,11 @@ export const FinanceProvider: React.FC<FinanceProviderProps> = ({ children }) =>
       }
 
       setQuotes(newQuotes);
+      console.log(`✅ Cotações: ${success} atualizadas, ${failed} falhas`);
       return { success, failed };
       
     } catch (error) {
-      console.error('Erro ao atualizar cotações:', error);
+      console.error('❌ Erro geral:', error);
       return { success: 0, failed: tickers?.length || assets.length };
     } finally {
       setQuotesLoading(false);
