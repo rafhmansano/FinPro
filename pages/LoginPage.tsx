@@ -80,14 +80,12 @@ export const LoginPage: React.FC = () => {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-slate-950 px-4">
-      {/* Background effects */}
       <div className="absolute inset-0 overflow-hidden">
         <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-blue-600/10 rounded-full blur-3xl"></div>
         <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-indigo-600/10 rounded-full blur-3xl"></div>
       </div>
 
       <div className="w-full max-w-md relative z-10">
-        {/* Logo */}
         <div className="text-center mb-8">
           <div className="flex items-center justify-center gap-3 mb-4">
             <div className="bg-blue-600 p-3 rounded-xl shadow-[0_0_20px_rgba(37,99,235,0.5)]">
@@ -98,13 +96,9 @@ export const LoginPage: React.FC = () => {
           <p className="text-slate-500 font-mono text-xs tracking-wider mt-1">TERMINAL FINANCEIRO V2.1</p>
         </div>
 
-        {/* Card de Login */}
         <div className="bg-slate-900/80 backdrop-blur-xl border border-slate-800 rounded-2xl p-8 shadow-2xl">
-          <h2 className="text-xl font-bold text-white mb-6 text-center">
-            {getTitle()}
-          </h2>
+          <h2 className="text-xl font-bold text-white mb-6 text-center">{getTitle()}</h2>
 
-          {/* Mensagens */}
           {error && (
             <div className="mb-4 p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 flex items-center gap-2 text-rose-400">
               <AlertCircle size={18} />
@@ -119,11 +113,8 @@ export const LoginPage: React.FC = () => {
           )}
 
           <form onSubmit={handleSubmit} className="space-y-4">
-            {/* E-mail */}
             <div>
-              <label className="block text-xs font-semibold text-slate-400 mb-2 uppercase tracking-wider">
-                E-mail
-              </label>
+              <label className="block text-xs font-semibold text-slate-400 mb-2 uppercase tracking-wider">E-mail</label>
               <div className="relative">
                 <Mail className="absolute left-4 top-1/2 transform -translate-y-1/2 text-slate-500" size={18} />
                 <input
@@ -138,12 +129,9 @@ export const LoginPage: React.FC = () => {
               </div>
             </div>
 
-            {/* Senha */}
             {mode !== 'forgot' && (
               <div>
-                <label className="block text-xs font-semibold text-slate-400 mb-2 uppercase tracking-wider">
-                  Senha
-                </label>
+                <label className="block text-xs font-semibold text-slate-400 mb-2 uppercase tracking-wider">Senha</label>
                 <div className="relative">
                   <Lock className="absolute left-4 top-1/2 transform -translate-y-1/2 text-slate-500" size={18} />
                   <input
@@ -167,12 +155,9 @@ export const LoginPage: React.FC = () => {
               </div>
             )}
 
-            {/* Confirmar Senha */}
             {mode === 'signup' && (
               <div>
-                <label className="block text-xs font-semibold text-slate-400 mb-2 uppercase tracking-wider">
-                  Confirmar Senha
-                </label>
+                <label className="block text-xs font-semibold text-slate-400 mb-2 uppercase tracking-wider">Confirmar Senha</label>
                 <div className="relative">
                   <Lock className="absolute left-4 top-1/2 transform -translate-y-1/2 text-slate-500" size={18} />
                   <input
@@ -189,7 +174,6 @@ export const LoginPage: React.FC = () => {
               </div>
             )}
 
-            {/* Esqueci a senha */}
             {mode === 'login' && (
               <div className="text-right">
                 <button
@@ -202,7 +186,6 @@ export const LoginPage: React.FC = () => {
               </div>
             )}
 
-            {/* Submit */}
             <button
               type="submit"
               disabled={loading}
@@ -223,15 +206,11 @@ export const LoginPage: React.FC = () => {
             </button>
           </form>
 
-          {/* Alternar modo */}
           <div className="mt-6 text-center text-sm text-slate-400">
             {mode === 'login' && (
               <>
                 Não tem conta?{' '}
-                <button
-                  onClick={() => { setMode('signup'); setError(null); }}
-                  className="text-blue-400 hover:text-blue-300 font-medium"
-                >
+                <button onClick={() => { setMode('signup'); setError(null); }} className="text-blue-400 hover:text-blue-300 font-medium">
                   Criar agora
                 </button>
               </>
@@ -239,26 +218,19 @@ export const LoginPage: React.FC = () => {
             {mode === 'signup' && (
               <>
                 Já tem conta?{' '}
-                <button
-                  onClick={() => { setMode('login'); setError(null); }}
-                  className="text-blue-400 hover:text-blue-300 font-medium"
-                >
+                <button onClick={() => { setMode('login'); setError(null); }} className="text-blue-400 hover:text-blue-300 font-medium">
                   Fazer login
                 </button>
               </>
             )}
             {mode === 'forgot' && (
-              <button
-                onClick={() => { setMode('login'); setError(null); }}
-                className="text-blue-400 hover:text-blue-300 font-medium"
-              >
+              <button onClick={() => { setMode('login'); setError(null); }} className="text-blue-400 hover:text-blue-300 font-medium">
                 ← Voltar ao login
               </button>
             )}
           </div>
         </div>
 
-        {/* Footer */}
         <p className="text-center text-slate-600 text-xs mt-6 font-mono">
           © {new Date().getFullYear()} FINPRO • TODOS OS DIREITOS RESERVADOS
         </p>

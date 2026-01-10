@@ -48,13 +48,7 @@ export const PrivacyProvider: React.FC<{ children: ReactNode }> = ({ children })
   }, [isHidden]);
 
   return (
-    <PrivacyContext.Provider value={{ 
-      isHidden, 
-      togglePrivacy, 
-      formatCurrency,
-      formatNumber,
-      formatPercent
-    }}>
+    <PrivacyContext.Provider value={{ isHidden, togglePrivacy, formatCurrency, formatNumber, formatPercent }}>
       {children}
     </PrivacyContext.Provider>
   );

@@ -53,7 +53,6 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, onNavigat
     setShowUserMenu(false);
   };
 
-  // Extrai iniciais do email
   const getInitials = (email: string) => {
     const parts = email.split('@')[0];
     return parts.slice(0, 2).toUpperCase();
@@ -114,7 +113,6 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, onNavigat
               <ChevronDown size={16} className={`text-slate-500 transition-transform ${showUserMenu ? 'rotate-180' : ''}`} />
             </button>
 
-            {/* Dropdown Menu */}
             {showUserMenu && (
               <div className="absolute bottom-full left-0 right-0 mb-2 bg-slate-900 border border-slate-800 rounded-xl shadow-xl overflow-hidden">
                 <button
@@ -139,18 +137,14 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, onNavigat
           <h1 className="font-bold text-white tracking-tight">FinPro</h1>
         </div>
         <div className="flex items-center gap-2">
-          {/* Botão de Privacidade Mobile */}
           <button
             onClick={togglePrivacy}
             className={`p-2 rounded-lg transition-all ${
-              isHidden 
-                ? 'bg-amber-500/10 text-amber-400' 
-                : 'bg-slate-800 text-slate-400'
+              isHidden ? 'bg-amber-500/10 text-amber-400' : 'bg-slate-800 text-slate-400'
             }`}
           >
             {isHidden ? <EyeOff size={18} /> : <Eye size={18} />}
           </button>
-          
           <button onClick={() => setIsMobileOpen(true)} className="text-slate-300 p-2 hover:bg-slate-800 rounded-lg">
             <Menu size={24} />
           </button>
@@ -169,8 +163,6 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, onNavigat
             <nav className="space-y-2 flex-1">
               {navItems.map(item => <NavItem key={item.id} item={item} />)}
             </nav>
-            
-            {/* Mobile Footer */}
             <div className="pt-4 border-t border-slate-800 space-y-3">
               <div className="px-2 py-2 bg-slate-950/50 rounded-xl border border-slate-800">
                 <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">Autenticado</p>

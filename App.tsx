@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { FinanceProvider, useFinance } from './context';
-import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { AuthProvider } from './contexts/AuthContext';
 import { PrivacyProvider } from './contexts/PrivacyContext';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { Layout } from './components/layout';
@@ -11,7 +11,7 @@ import { Dividends } from './pages/Dividends';
 import { Valuation } from './pages/Valuation';
 import { Settings } from './pages/Settings';
 
-const AppContent = () => {
+const AppContent: React.FC = () => {
   const { loading } = useFinance();
   const [currentPage, setCurrentPage] = useState('DASHBOARD');
 
@@ -34,7 +34,7 @@ const AppContent = () => {
   );
 };
 
-export default function App() {
+const App: React.FC = () => {
   return (
     <AuthProvider>
       <PrivacyProvider>
@@ -46,4 +46,6 @@ export default function App() {
       </PrivacyProvider>
     </AuthProvider>
   );
-}
+};
+
+export default App;

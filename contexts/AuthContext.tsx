@@ -20,7 +20,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Verifica sessão existente
     const initializeAuth = async () => {
       try {
         const { data: { session: currentSession } } = await supabase.auth.getSession();
@@ -35,7 +34,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
     initializeAuth();
 
-    // Escuta mudanças de autenticação
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (_event, currentSession) => {
         setSession(currentSession);
@@ -71,15 +69,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   return (
-    <AuthContext.Provider value={{
-      user,
-      session,
-      loading,
-      signIn,
-      signUp,
-      signOut,
-      resetPassword,
-    }}>
+    <AuthContext.Provider value={{ user, session, loading, signIn, signUp, signOut, resetPassword }}>
       {children}
     </AuthContext.Provider>
   );
