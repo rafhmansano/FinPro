@@ -1,12 +1,12 @@
 import React, { useMemo, useState } from 'react';
 import { useFinance } from '../context';
+import { usePrivacy } from '../contexts/PrivacyContext';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, 
   PieChart, Pie, Cell, Legend, ComposedChart, Line
 } from 'recharts';
 import { TrendingUp, Wallet, PieChart as PieIcon, BarChart2, Calendar, Target } from 'lucide-react';
 
-// Paleta de cores sóbrias e modernas (#11)
 const COLORS = {
   primary: '#3b82f6',
   secondary: '#64748b',
@@ -18,7 +18,6 @@ const COLORS = {
   dark: '#1e293b',
 };
 
-// Paleta para gráficos de barras empilhadas - tons sóbrios (#11)
 const STACKED_COLORS = [
   '#3b82f6', '#6366f1', '#8b5cf6', '#a855f7', '#c084fc',
   '#64748b', '#475569', '#334155', '#1e293b', '#0f172a',
@@ -26,7 +25,6 @@ const STACKED_COLORS = [
   '#f59e0b', '#d97706', '#b45309', '#92400e', '#78350f',
 ];
 
-// Metas de dividendos por ano
 const DIVIDEND_GOALS: Record<number, { yearly: number; monthly: number }> = {
   2018: { yearly: 1.00, monthly: 0.08 },
   2019: { yearly: 500.00, monthly: 41.67 },
@@ -45,41 +43,34 @@ const DIVIDEND_GOALS: Record<number, { yearly: number; monthly: number }> = {
 
 const MONTH_NAMES = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
 
-// Função para corrigir timezone da data - FIX #1
 const parseLocalDate = (dateStr: string): Date => {
   if (!dateStr) return new Date();
   const [year, month, day] = dateStr.split('-').map(Number);
   return new Date(year, month - 1, day || 1, 12, 0, 0);
 };
 
-const formatCurrency = (value: number, currency: string = 'BRL') => {
-  if (currency === 'USD') {
-    return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(value);
-  }
-  return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
-};
-
-// Tooltip customizado
-const CustomTooltip = ({ active, payload, label }: any) => {
-  if (!active || !payload?.length) return null;
-  return (
-    <div className="bg-slate-900 border border-slate-700 rounded-xl p-3 shadow-xl">
-      <p className="text-slate-400 text-xs mb-2 font-medium">{label}</p>
-      {payload.map((entry: any, idx: number) => (
-        <p key={idx} className="text-sm font-semibold" style={{ color: entry.color || entry.fill }}>
-          {entry.name}: {formatCurrency(entry.value)}
-        </p>
-      ))}
-    </div>
-  );
-};
-
 export const Dashboard = () => {
   const { dividends, assets, trades } = useFinance();
+  const { formatCurrency, formatPercent, isHidden } = usePrivacy();
   const [activeTab, setActiveTab] = useState<'dividends' | 'portfolio'>('dividends');
   
   const currentYear = new Date().getFullYear();
   const currentMonth = new Date().getMonth();
+
+  // Tooltip customizado com privacidade
+  const CustomTooltip = ({ active, payload, label }: any) => {
+    if (!active || !payload?.length) return null;
+    return (
+      <div className="bg-slate-900 border border-slate-700 rounded-xl p-3 shadow-xl">
+        <p className="text-slate-400 text-xs mb-2 font-medium">{label}</p>
+        {payload.map((entry: any, idx: number) => (
+          <p key={idx} className="text-sm font-semibold" style={{ color: entry.color || entry.fill }}>
+            {entry.name}: {formatCurrency(entry.value)}
+          </p>
+        ))}
+      </div>
+    );
+  };
 
   const getAssetType = (ticker: string): 'ACAO' | 'FII' | 'ETF' => {
     if (!ticker) return 'ACAO';
@@ -99,14 +90,12 @@ export const Dashboard = () => {
     return 'ACAO';
   };
 
-  // FIX #8 - Identificar moeda do ativo
   const getAssetCurrency = (ticker: string): string => {
     if (ticker?.toUpperCase() === 'TFLO') return 'USD';
     const asset = assets.find(a => a.ticker?.toUpperCase() === ticker?.toUpperCase());
     return asset?.currency || 'BRL';
   };
 
-  // Processar dividendos com data corrigida (FIX #1)
   const processedDividends = useMemo(() => {
     return dividends
       .filter((d, idx, self) => idx === self.findIndex(t => t.id === d.id))
@@ -126,7 +115,6 @@ export const Dashboard = () => {
       .filter(d => d.totalValue > 0 && d.year >= 2018);
   }, [dividends, assets]);
 
-  // FIX #2 - Média mensal do ANO VIGENTE
   const totals = useMemo(() => {
     const totalAll = processedDividends.reduce((sum, d) => sum + d.totalValue, 0);
     
@@ -141,7 +129,6 @@ export const Dashboard = () => {
     return { totalAll, monthlyAvgCurrentYear, currentYearTotal, goal, progressYearly };
   }, [processedDividends, currentYear]);
 
-  // FIX #3 - Dividendo mensal real vs. meta - ÚLTIMOS 12 MESES
   const monthlyRealVsGoalData = useMemo(() => {
     const last12Months: { year: number; month: number }[] = [];
     for (let i = 11; i >= 0; i--) {
@@ -156,13 +143,12 @@ export const Dashboard = () => {
       const goal = DIVIDEND_GOALS[year]?.monthly || 0;
       return {
         name: `${MONTH_NAMES[month]}/${String(year).slice(2)}`,
-        real,
-        meta: goal
+        real: isHidden ? 0 : real,
+        meta: isHidden ? 0 : goal
       };
     });
-  }, [processedDividends, currentYear, currentMonth]);
+  }, [processedDividends, currentYear, currentMonth, isHidden]);
 
-  // FIX #4 - Crescimento anual a partir de 2020
   const yearlyGrowthData = useMemo(() => {
     const byYear: Record<number, number> = {};
     processedDividends.forEach(d => {
@@ -177,11 +163,15 @@ export const Dashboard = () => {
       const prevValue = idx > 0 ? byYear[years[idx - 1]] : 0;
       const growth = prevValue > 0 ? ((value - prevValue) / prevValue) * 100 : 0;
       const goal = DIVIDEND_GOALS[year]?.yearly || 0;
-      return { year: String(year), value, growth: idx > 0 ? growth : null, meta: goal };
+      return { 
+        year: String(year), 
+        value: isHidden ? 0 : value, 
+        growth: idx > 0 ? (isHidden ? 0 : growth) : null, 
+        meta: isHidden ? 0 : goal 
+      };
     });
-  }, [processedDividends]);
+  }, [processedDividends, isHidden]);
 
-  // FIX #5 - Distribuição mensal por ativo - BARRAS EMPILHADAS cronológicas
   const monthlyByAssetData = useMemo(() => {
     const last12Months: { year: number; month: number; label: string }[] = [];
     for (let i = 11; i >= 0; i--) {
@@ -208,11 +198,11 @@ export const Dashboard = () => {
         const value = processedDividends
           .filter(d => d.year === monthInfo.year && d.month === monthInfo.month && d.ticker === ticker)
           .reduce((sum, d) => sum + d.totalValue, 0);
-        entry[ticker] = value || 0;
+        entry[ticker] = isHidden ? 0 : (value || 0);
       });
       return entry;
     });
-  }, [processedDividends, currentYear, currentMonth]);
+  }, [processedDividends, currentYear, currentMonth, isHidden]);
 
   const stackedTickers = useMemo(() => {
     const tickers = new Set<string>();
@@ -224,7 +214,6 @@ export const Dashboard = () => {
     return Array.from(tickers).sort();
   }, [monthlyByAssetData]);
 
-  // FIX #6 - Carteira com TODOS os ativos
   const portfolioData = useMemo(() => {
     const holdings: Record<string, { ticker: string; quantity: number; avgPrice: number; type: string; currency: string }> = {};
     
@@ -267,30 +256,29 @@ export const Dashboard = () => {
     }, {} as Record<string, number>);
     
     const typeData = [
-      { name: 'Ações', value: byType['ACAO'] || 0, color: COLORS.primary },
-      { name: 'FIIs', value: byType['FII'] || 0, color: COLORS.warning },
-      { name: 'ETFs', value: byType['ETF'] || 0, color: COLORS.accent }
-    ].filter(t => t.value > 0);
+      { name: 'Ações', value: isHidden ? 0 : (byType['ACAO'] || 0), color: COLORS.primary },
+      { name: 'FIIs', value: isHidden ? 0 : (byType['FII'] || 0), color: COLORS.warning },
+      { name: 'ETFs', value: isHidden ? 0 : (byType['ETF'] || 0), color: COLORS.accent }
+    ].filter(t => t.value > 0 || isHidden);
     
     const assetData = activeHoldings.map(h => ({
       ticker: h.ticker,
-      value: h.totalValue,
+      value: isHidden ? 0 : h.totalValue,
       currency: h.currency
     }));
     
-    return { typeData, assetData, totalValue: activeHoldings.reduce((sum, h) => sum + h.totalValue, 0) };
-  }, [trades, assets]);
+    return { typeData, assetData, totalValue: isHidden ? 0 : activeHoldings.reduce((sum, h) => sum + h.totalValue, 0) };
+  }, [trades, assets, isHidden]);
 
-  // FIX #10 - TODOS os ativos por dividendos
   const dividendsByAsset = useMemo(() => {
     const byAsset: Record<string, number> = {};
     processedDividends.forEach(d => {
       byAsset[d.ticker] = (byAsset[d.ticker] || 0) + d.totalValue;
     });
     return Object.entries(byAsset)
-      .map(([ticker, value]) => ({ ticker, value }))
+      .map(([ticker, value]) => ({ ticker, value: isHidden ? 0 : value }))
       .sort((a, b) => b.value - a.value);
-  }, [processedDividends]);
+  }, [processedDividends, isHidden]);
 
   return (
     <div className="space-y-8">
@@ -372,18 +360,17 @@ export const Dashboard = () => {
                 </div>
                 <div>
                   <p className="text-xs text-indigo-300 font-semibold uppercase">Progresso Anual</p>
-                  <p className="text-2xl font-bold text-white">{totals.progressYearly.toFixed(1)}%</p>
+                  <p className="text-2xl font-bold text-white">{isHidden ? '•••' : `${totals.progressYearly.toFixed(1)}%`}</p>
                 </div>
               </div>
               <div className="w-full bg-slate-800 rounded-full h-2 mt-2">
-                <div className="bg-indigo-500 h-2 rounded-full transition-all" style={{ width: `${Math.min(totals.progressYearly, 100)}%` }} />
+                <div className="bg-indigo-500 h-2 rounded-full transition-all" style={{ width: isHidden ? '0%' : `${Math.min(totals.progressYearly, 100)}%` }} />
               </div>
             </div>
           </div>
 
           {/* Gráficos */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-            {/* FIX #3 - Últimos 12 meses */}
             <div className="bg-slate-900/50 border border-slate-800 p-6 rounded-2xl">
               <h3 className="text-lg font-bold text-white mb-6 flex items-center gap-2">
                 <BarChart2 size={20} className="text-blue-400" />
@@ -404,7 +391,6 @@ export const Dashboard = () => {
               </div>
             </div>
 
-            {/* FIX #4 - A partir de 2020 */}
             <div className="bg-slate-900/50 border border-slate-800 p-6 rounded-2xl">
               <h3 className="text-lg font-bold text-white mb-6 flex items-center gap-2">
                 <TrendingUp size={20} className="text-emerald-400" />
@@ -427,7 +413,6 @@ export const Dashboard = () => {
               </div>
             </div>
 
-            {/* FIX #5 - Barras empilhadas cronológicas */}
             <div className="lg:col-span-2 bg-slate-900/50 border border-slate-800 p-6 rounded-2xl">
               <h3 className="text-lg font-bold text-white mb-6 flex items-center gap-2">
                 <Calendar size={20} className="text-amber-400" />
@@ -482,7 +467,7 @@ export const Dashboard = () => {
                       cx="50%"
                       cy="50%"
                       outerRadius={100}
-                      label={({ name, percent }) => `${name} ${(percent * 100).toFixed(1)}%`}
+                      label={({ name, percent }) => isHidden ? name : `${name} ${(percent * 100).toFixed(1)}%`}
                       labelLine={{ stroke: '#64748b' }}
                     >
                       {portfolioData.typeData.map((entry, idx) => (
@@ -495,7 +480,6 @@ export const Dashboard = () => {
               </div>
             </div>
 
-            {/* FIX #6 - TODOS os ativos */}
             <div className="bg-slate-900/50 border border-slate-800 p-6 rounded-2xl">
               <h3 className="text-lg font-bold text-white mb-6 flex items-center gap-2">
                 <BarChart2 size={20} className="text-emerald-400" />
@@ -523,7 +507,6 @@ export const Dashboard = () => {
               </div>
             </div>
 
-            {/* FIX #10 - TODOS ativos por dividendos */}
             <div className="lg:col-span-2 bg-slate-900/50 border border-slate-800 p-6 rounded-2xl">
               <h3 className="text-lg font-bold text-white mb-6 flex items-center gap-2">
                 <TrendingUp size={20} className="text-amber-400" />

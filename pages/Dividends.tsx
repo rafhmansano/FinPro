@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { useFinance } from '../context';
+import { usePrivacy } from '../contexts/PrivacyContext';
 import { Button, Modal, Input, Select } from '../components/ui';
 import { Plus, Trash2, BarChart2, PieChart as PieIcon, Calendar, TrendingUp, Edit2, Save, Upload, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';
@@ -25,8 +26,6 @@ const formatMonthYear = (dateStr: string): string => {
   return `${MONTH_NAMES[date.getMonth()]}/${date.getFullYear()}`;
 };
 
-const monthYearToDbFormat = (month: string, year: string): string => `${year}-${month.padStart(2, '0')}-01`;
-
 const MonthYearPicker = ({ label, month, year, onMonthChange, onYearChange }: any) => {
   const currentYear = new Date().getFullYear();
   const years = Array.from({ length: 20 }, (_, i) => currentYear - 10 + i);
@@ -45,22 +44,10 @@ const MonthYearPicker = ({ label, month, year, onMonthChange, onYearChange }: an
   );
 };
 
-const CustomTooltip = ({ active, payload, label }: any) => {
-  if (!active || !payload?.length) return null;
-  return (
-    <div className="bg-slate-900 border border-slate-700 rounded-xl p-3 shadow-xl">
-      <p className="text-slate-400 text-xs mb-2">{label}</p>
-      {payload.map((entry: any, idx: number) => (
-        <p key={idx} className="text-sm font-semibold" style={{ color: entry.color || entry.fill }}>
-          {entry.name}: {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(entry.value)}
-        </p>
-      ))}
-    </div>
-  );
-};
-
 export const Dividends = () => {
-  const { dividends, addDividend, deleteItem, assets, bulkInsert } = useFinance();
+  const { dividends, addDividend, deleteItem, assets } = useFinance();
+  const { formatCurrency, isHidden } = usePrivacy();
+  
   const [isOpen, setIsOpen] = useState(false);
   const [editingDividend, setEditingDividend] = useState<any>(null);
   const [filterType, setFilterType] = useState<FilterType>('ALL');
@@ -71,10 +58,20 @@ export const Dividends = () => {
   const [formYear, setFormYear] = useState(String(new Date().getFullYear()));
   const [sortField, setSortField] = useState<SortField>('paymentDate');
   const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
-  const [showImportModal, setShowImportModal] = useState(false);
-  const [importUrl, setImportUrl] = useState('');
-  const [isImporting, setIsImporting] = useState(false);
-  const [importResults, setImportResults] = useState<any>(null);
+
+  const CustomTooltip = ({ active, payload, label }: any) => {
+    if (!active || !payload?.length) return null;
+    return (
+      <div className="bg-slate-900 border border-slate-700 rounded-xl p-3 shadow-xl">
+        <p className="text-slate-400 text-xs mb-2">{label}</p>
+        {payload.map((entry: any, idx: number) => (
+          <p key={idx} className="text-sm font-semibold" style={{ color: entry.color || entry.fill }}>
+            {entry.name}: {formatCurrency(entry.value)}
+          </p>
+        ))}
+      </div>
+    );
+  };
 
   const getAssetType = (ticker: string): 'ACAO' | 'FII' | 'ETF' => {
     if (!ticker) return 'ACAO';
@@ -135,118 +132,209 @@ export const Dividends = () => {
 
   const chartData = useMemo(() => {
     const monthlyData = Object.entries(totals.byMonth).sort((a, b) => a[0].localeCompare(b[0])).slice(-12)
-      .map(([key, value]) => { const [y, m] = key.split('-'); return { name: `${MONTH_NAMES[parseInt(m) - 1]}/${y.slice(2)}`, value }; });
-    const yearlyData = Object.entries(totals.byYear).sort((a, b) => a[0].localeCompare(b[0])).map(([year, value]) => ({ year, value }));
+      .map(([key, value]) => { const [y, m] = key.split('-'); return { name: `${MONTH_NAMES[parseInt(m) - 1]}/${y.slice(2)}`, value: isHidden ? 0 : value }; });
+    const yearlyData = Object.entries(totals.byYear).sort((a, b) => a[0].localeCompare(b[0])).map(([year, value]) => ({ year, value: isHidden ? 0 : value }));
     const typeData = [
-      { name: 'Ações', value: totals.byType.ACAO, color: COLORS.primary },
-      { name: 'FIIs', value: totals.byType.FII, color: COLORS.warning },
-      { name: 'ETFs', value: totals.byType.ETF, color: COLORS.accent }
-    ].filter(t => t.value > 0);
-    const assetData = Object.entries(totals.byAsset).sort((a, b) => b[1] - a[1]).map(([ticker, value]) => ({ ticker, value }));
+      { name: 'Ações', value: isHidden ? 0 : totals.byType.ACAO, color: COLORS.primary },
+      { name: 'FIIs', value: isHidden ? 0 : totals.byType.FII, color: COLORS.warning },
+      { name: 'ETFs', value: isHidden ? 0 : totals.byType.ETF, color: COLORS.accent }
+    ].filter(t => t.value > 0 || isHidden);
+    const assetData = Object.entries(totals.byAsset).sort((a, b) => b[1] - a[1]).map(([ticker, value]) => ({ ticker, value: isHidden ? 0 : value }));
     return { monthlyData, yearlyData, typeData, assetData };
-  }, [totals]);
+  }, [totals, isHidden]);
 
-  const formatCurrency = (val: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
   const totalFiltered = filteredAndSortedDividends.reduce((sum, d) => sum + d.totalValue, 0);
-  const totalAll = dividendsWithType.reduce((sum, d) => sum + d.totalValue, 0);
 
-  const handleSort = (field: SortField) => { sortField === field ? setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc') : (setSortField(field), setSortOrder('desc')); };
-  const SortIcon = ({ field }: { field: SortField }) => sortField !== field ? <ArrowUpDown size={14} className="text-slate-600" /> : sortOrder === 'asc' ? <ArrowUp size={14} className="text-blue-400" /> : <ArrowDown size={14} className="text-blue-400" />;
+  const handleSort = (field: SortField) => {
+    if (sortField === field) {
+      setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortOrder('desc');
+    }
+  };
+
+  const SortIcon = ({ field }: { field: SortField }) => {
+    if (sortField !== field) return <ArrowUpDown size={14} className="text-slate-600" />;
+    return sortOrder === 'asc' ? <ArrowUp size={14} className="text-blue-400" /> : <ArrowDown size={14} className="text-blue-400" />;
+  };
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
     const data = Object.fromEntries(formData.entries());
-    await addDividend({ ticker: String(data.ticker).toUpperCase(), payment_date: monthYearToDbFormat(formMonth, formYear), total_value: Number(data.totalValue), type: data.type || 'DIVIDENDO' } as any);
-    setIsOpen(false); setEditingDividend(null);
+    
+    const paymentDate = `${formYear}-${formMonth}-15`;
+    
+    await addDividend({
+      ticker: String(data.ticker).toUpperCase(),
+      type: String(data.type),
+      total_value: Number(data.totalValue),
+      payment_date: paymentDate
+    } as any);
+    
+    setIsOpen(false);
+    setEditingDividend(null);
   };
 
-  const handleEdit = (d: any) => { setEditingDividend(d); const date = parseLocalDate(d.paymentDate); setFormMonth(String(date.getMonth() + 1).padStart(2, '0')); setFormYear(String(date.getFullYear())); setIsOpen(true); };
-  const handleOpenNew = () => { setEditingDividend(null); setFormMonth(String(new Date().getMonth() + 1).padStart(2, '0')); setFormYear(String(new Date().getFullYear())); setIsOpen(true); };
+  const handleEdit = (dividend: any) => {
+    setEditingDividend(dividend);
+    setFormMonth(dividend.month);
+    setFormYear(dividend.year);
+    setIsOpen(true);
+  };
+
+  const handleOpenNew = () => {
+    setEditingDividend(null);
+    setFormMonth(String(new Date().getMonth() + 1).padStart(2, '0'));
+    setFormYear(String(new Date().getFullYear()));
+    setIsOpen(true);
+  };
 
   return (
     <div className="space-y-8">
+      {/* Header */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-slate-800 pb-6">
         <div>
-          <h2 className="text-2xl font-bold text-white flex items-center gap-2"><BarChart2 className="text-emerald-500" /> Dividendos & Proventos</h2>
-          <p className="text-slate-400 text-sm">Gestão completa de renda passiva</p>
-          <div className="flex gap-4 mt-3">
-            <div className="text-sm"><span className="text-slate-500">Total Geral:</span><span className="font-bold text-emerald-400 ml-2">{formatCurrency(totalAll)}</span></div>
-            {totalFiltered !== totalAll && <div className="text-sm"><span className="text-slate-500">Filtrado:</span><span className="font-bold text-blue-400 ml-2">{formatCurrency(totalFiltered)}</span></div>}
+          <h2 className="text-2xl font-bold text-white flex items-center gap-2">
+            <TrendingUp className="text-emerald-500" /> Dividendos
+          </h2>
+          <p className="text-slate-400 text-sm">Histórico e análise de proventos recebidos</p>
+        </div>
+        <Button onClick={handleOpenNew}>
+          <Plus size={18} /> Novo Dividendo
+        </Button>
+      </div>
+
+      {/* Cards de Resumo */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+        <div className="bg-gradient-to-br from-emerald-600/20 to-emerald-700/10 border border-emerald-500/20 rounded-2xl p-6">
+          <div className="flex items-center gap-3 mb-2">
+            <div className="p-3 bg-emerald-500/20 rounded-xl">
+              <TrendingUp className="text-emerald-400" size={24} />
+            </div>
+            <div>
+              <p className="text-xs text-emerald-300 font-semibold uppercase">Total Filtrado</p>
+              <p className="text-2xl font-bold text-white">{formatCurrency(totalFiltered)}</p>
+            </div>
           </div>
         </div>
-        <div className="flex gap-3">
-          <Button variant="ghost" onClick={() => setShowImportModal(true)}><Upload size={18} /> Importar</Button>
-          <Button onClick={handleOpenNew}><Plus size={18} /> Adicionar</Button>
+
+        <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-6">
+          <div className="flex items-center gap-3 mb-2">
+            <div className="p-3 bg-blue-500/20 rounded-xl">
+              <BarChart2 className="text-blue-400" size={24} />
+            </div>
+            <div>
+              <p className="text-xs text-blue-300 font-semibold uppercase">Ações</p>
+              <p className="text-2xl font-bold text-white">{formatCurrency(totals.byType.ACAO)}</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-6">
+          <div className="flex items-center gap-3 mb-2">
+            <div className="p-3 bg-amber-500/20 rounded-xl">
+              <PieIcon className="text-amber-400" size={24} />
+            </div>
+            <div>
+              <p className="text-xs text-amber-300 font-semibold uppercase">FIIs</p>
+              <p className="text-2xl font-bold text-white">{formatCurrency(totals.byType.FII)}</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-6">
+          <div className="flex items-center gap-3 mb-2">
+            <div className="p-3 bg-purple-500/20 rounded-xl">
+              <Calendar className="text-purple-400" size={24} />
+            </div>
+            <div>
+              <p className="text-xs text-purple-300 font-semibold uppercase">ETFs</p>
+              <p className="text-2xl font-bold text-white">{formatCurrency(totals.byType.ETF)}</p>
+            </div>
+          </div>
         </div>
       </div>
 
+      {/* Filtros e Views */}
       <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-6">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <div><label className="text-xs font-bold text-slate-400 mb-2 block uppercase">Tipo</label>
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+          <div>
+            <label className="text-xs text-slate-500 mb-1 block">Buscar Ticker</label>
+            <input
+              type="text"
+              value={searchTicker}
+              onChange={(e) => setSearchTicker(e.target.value)}
+              placeholder="Ex: PETR4"
+              className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2 text-slate-200"
+            />
+          </div>
+          <div>
+            <label className="text-xs text-slate-500 mb-1 block">Tipo de Ativo</label>
             <select value={filterType} onChange={(e) => setFilterType(e.target.value as FilterType)} className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2 text-slate-200">
-              <option value="ALL">Todos</option><option value="ACAO">Ações</option><option value="FII">FIIs</option><option value="ETF">ETFs</option>
+              <option value="ALL">Todos</option>
+              <option value="ACAO">Ações</option>
+              <option value="FII">FIIs</option>
+              <option value="ETF">ETFs</option>
             </select>
           </div>
-          <div><label className="text-xs font-bold text-slate-400 mb-2 block uppercase">Ano</label>
+          <div>
+            <label className="text-xs text-slate-500 mb-1 block">Ano</label>
             <select value={filterYear} onChange={(e) => setFilterYear(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2 text-slate-200">
-              <option value="ALL">Todos</option>{availableYears.map(y => <option key={y} value={y}>{y}</option>)}
+              <option value="ALL">Todos</option>
+              {availableYears.map(y => <option key={y} value={y}>{y}</option>)}
             </select>
           </div>
-          <div><label className="text-xs font-bold text-slate-400 mb-2 block uppercase">Ticker</label>
-            <input type="text" value={searchTicker} onChange={(e) => setSearchTicker(e.target.value)} placeholder="Buscar..." className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2 text-slate-200" />
-          </div>
-          <div><label className="text-xs font-bold text-slate-400 mb-2 block uppercase">Visualização</label>
-            <select value={viewMode} onChange={(e) => setViewMode(e.target.value as ViewMode)} className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2 text-slate-200">
-              <option value="TABLE">Tabela</option><option value="MONTHLY">Mensal</option><option value="YEARLY">Anual</option><option value="BY_ASSET">Por Ativo</option>
-            </select>
+          <div className="md:col-span-2">
+            <label className="text-xs text-slate-500 mb-1 block">Visualização</label>
+            <div className="flex gap-2">
+              {(['TABLE', 'MONTHLY', 'YEARLY', 'BY_ASSET'] as ViewMode[]).map(mode => (
+                <button
+                  key={mode}
+                  onClick={() => setViewMode(mode)}
+                  className={`px-4 py-2 rounded-xl text-sm font-medium transition-all ${viewMode === mode ? 'bg-blue-600 text-white' : 'bg-slate-800 text-slate-400 hover:text-white'}`}
+                >
+                  {mode === 'TABLE' ? 'Tabela' : mode === 'MONTHLY' ? 'Mensal' : mode === 'YEARLY' ? 'Anual' : 'Por Ativo'}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {[{ label: 'Ações', value: totals.byType.ACAO, color: 'blue', count: dividendsWithType.filter(d => d.assetType === 'ACAO').length },
-          { label: 'FIIs', value: totals.byType.FII, color: 'amber', count: dividendsWithType.filter(d => d.assetType === 'FII').length },
-          { label: 'ETFs', value: totals.byType.ETF, color: 'purple', count: dividendsWithType.filter(d => d.assetType === 'ETF').length }
-        ].map(({ label, value, color, count }) => (
-          <div key={label} className={`bg-gradient-to-br from-${color}-500/10 to-${color}-600/5 border border-${color}-500/20 rounded-2xl p-6`}>
-            <p className={`text-xs text-${color}-300 font-bold uppercase`}>{label}</p>
-            <p className="text-2xl font-bold text-white">{formatCurrency(value)}</p>
-            <p className="text-xs text-slate-500">{count} pagamentos</p>
-          </div>
-        ))}
-      </div>
-
+      {/* Gráficos */}
       {viewMode !== 'TABLE' && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
           {viewMode === 'MONTHLY' && (
             <div className="lg:col-span-2 bg-slate-900/50 border border-slate-800 p-6 rounded-2xl">
-              <h3 className="text-lg font-bold text-white mb-6">Evolução Mensal</h3>
-              <div className="h-[400px]">
+              <h3 className="text-lg font-bold text-white mb-6">Dividendos Mensais (Últimos 12 meses)</h3>
+              <div className="h-[300px]">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={chartData.monthlyData}>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#1e293b" />
-                    <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#64748b'}} />
-                    <YAxis axisLine={false} tickLine={false} tick={{fill: '#64748b'}} />
+                    <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 11 }} />
+                    <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 11 }} />
                     <Tooltip content={<CustomTooltip />} />
-                    <Bar dataKey="value" name="Recebido" fill={COLORS.primary} radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="value" name="Dividendos" fill={COLORS.success} radius={[4, 4, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
             </div>
           )}
+
           {viewMode === 'YEARLY' && (
             <>
               <div className="bg-slate-900/50 border border-slate-800 p-6 rounded-2xl">
-                <h3 className="text-lg font-bold text-white mb-6">Evolução Anual</h3>
+                <h3 className="text-lg font-bold text-white mb-6">Dividendos por Ano</h3>
                 <div className="h-[300px]">
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={chartData.yearlyData}>
                       <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#1e293b" />
-                      <XAxis dataKey="year" axisLine={false} tickLine={false} tick={{fill: '#64748b'}} />
-                      <YAxis axisLine={false} tickLine={false} tick={{fill: '#64748b'}} />
+                      <XAxis dataKey="year" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 11 }} />
+                      <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 11 }} />
                       <Tooltip content={<CustomTooltip />} />
-                      <Bar dataKey="value" name="Total" fill={COLORS.primary} radius={[4, 4, 0, 0]} />
+                      <Bar dataKey="value" name="Dividendos" fill={COLORS.primary} radius={[4, 4, 0, 0]} />
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
@@ -255,25 +343,29 @@ export const Dividends = () => {
                 <h3 className="text-lg font-bold text-white mb-6">Distribuição por Tipo</h3>
                 <div className="h-[300px]">
                   <ResponsiveContainer width="100%" height="100%">
-                    <PieChart><Pie data={chartData.typeData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={100} label={({ name, percent }) => `${name} ${(percent * 100).toFixed(1)}%`}>
-                      {chartData.typeData.map((entry, i) => <Cell key={i} fill={entry.color} />)}
-                    </Pie><Tooltip formatter={(v: number) => formatCurrency(v)} /></PieChart>
+                    <PieChart>
+                      <Pie data={chartData.typeData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={100} label={({ name, percent }) => isHidden ? name : `${name} ${(percent * 100).toFixed(1)}%`}>
+                        {chartData.typeData.map((entry, idx) => <Cell key={idx} fill={entry.color} />)}
+                      </Pie>
+                      <Tooltip formatter={(val: number) => formatCurrency(val)} />
+                    </PieChart>
                   </ResponsiveContainer>
                 </div>
               </div>
             </>
           )}
+
           {viewMode === 'BY_ASSET' && (
             <div className="lg:col-span-2 bg-slate-900/50 border border-slate-800 p-6 rounded-2xl">
-              <h3 className="text-lg font-bold text-white mb-6">Todos os Ativos</h3>
+              <h3 className="text-lg font-bold text-white mb-6">Dividendos por Ativo</h3>
               <div className="h-[400px] overflow-y-auto">
                 <ResponsiveContainer width="100%" height={Math.max(400, chartData.assetData.length * 30)}>
                   <BarChart data={chartData.assetData} layout="vertical" margin={{ left: 60 }}>
                     <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#1e293b" />
-                    <XAxis type="number" axisLine={false} tickLine={false} tick={{fill: '#64748b'}} />
-                    <YAxis dataKey="ticker" type="category" axisLine={false} tickLine={false} tick={{fill: '#64748b'}} width={55} />
+                    <XAxis type="number" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 11 }} />
+                    <YAxis dataKey="ticker" type="category" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 11 }} width={55} />
                     <Tooltip content={<CustomTooltip />} />
-                    <Bar dataKey="value" name="Total" fill={COLORS.success} radius={[0, 4, 4, 0]} />
+                    <Bar dataKey="value" name="Dividendos" fill={COLORS.success} radius={[0, 4, 4, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
@@ -282,74 +374,79 @@ export const Dividends = () => {
         </div>
       )}
 
+      {/* Tabela */}
       {viewMode === 'TABLE' && (
         <div className="bg-slate-900/50 border border-slate-800 rounded-2xl overflow-hidden">
+          <div className="p-4 border-b border-slate-800 flex justify-between items-center">
+            <h3 className="font-bold text-white">Histórico de Dividendos</h3>
+            <span className="text-sm text-slate-500">{isHidden ? '•••' : filteredAndSortedDividends.length} registros</span>
+          </div>
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm">
               <thead className="bg-slate-800/50 text-slate-400 font-semibold uppercase text-xs">
                 <tr>
-                  <th className="p-5"><button onClick={() => handleSort('paymentDate')} className="flex items-center gap-2 hover:text-white">Mês/Ano <SortIcon field="paymentDate" /></button></th>
-                  <th className="p-5"><button onClick={() => handleSort('ticker')} className="flex items-center gap-2 hover:text-white">Ativo <SortIcon field="ticker" /></button></th>
-                  <th className="p-5"><button onClick={() => handleSort('assetType')} className="flex items-center gap-2 hover:text-white">Tipo <SortIcon field="assetType" /></button></th>
-                  <th className="p-5"><button onClick={() => handleSort('type')} className="flex items-center gap-2 hover:text-white">Categoria <SortIcon field="type" /></button></th>
-                  <th className="p-5 text-right"><button onClick={() => handleSort('totalValue')} className="flex items-center gap-2 hover:text-white ml-auto">Valor <SortIcon field="totalValue" /></button></th>
-                  <th className="p-5 text-right">Ações</th>
+                  <th className="p-4 cursor-pointer hover:text-white" onClick={() => handleSort('paymentDate')}>
+                    <div className="flex items-center gap-2">Pagamento <SortIcon field="paymentDate" /></div>
+                  </th>
+                  <th className="p-4 cursor-pointer hover:text-white" onClick={() => handleSort('ticker')}>
+                    <div className="flex items-center gap-2">Ticker <SortIcon field="ticker" /></div>
+                  </th>
+                  <th className="p-4 cursor-pointer hover:text-white" onClick={() => handleSort('assetType')}>
+                    <div className="flex items-center gap-2">Classe <SortIcon field="assetType" /></div>
+                  </th>
+                  <th className="p-4 cursor-pointer hover:text-white" onClick={() => handleSort('type')}>
+                    <div className="flex items-center gap-2">Tipo <SortIcon field="type" /></div>
+                  </th>
+                  <th className="p-4 text-right cursor-pointer hover:text-white" onClick={() => handleSort('totalValue')}>
+                    <div className="flex items-center gap-2 justify-end">Valor <SortIcon field="totalValue" /></div>
+                  </th>
+                  <th className="p-4 text-right">Ações</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800">
                 {filteredAndSortedDividends.map(d => (
                   <tr key={d.id} className="hover:bg-slate-800/30 group">
-                    <td className="p-5 font-mono text-slate-300">{formatMonthYear(d.paymentDate)}</td>
-                    <td className="p-5 font-bold text-white">{d.ticker}</td>
-                    <td className="p-5"><span className={`text-[10px] px-2 py-1 rounded font-bold ${d.assetType === 'ACAO' ? 'bg-blue-500/10 text-blue-400' : d.assetType === 'FII' ? 'bg-amber-500/10 text-amber-400' : 'bg-purple-500/10 text-purple-400'}`}>{d.assetType}</span></td>
-                    <td className="p-5"><span className="text-xs bg-slate-800 px-2 py-1 rounded text-slate-400">{d.type}</span></td>
-                    <td className="p-5 text-right font-bold font-mono text-emerald-400">{formatCurrency(d.totalValue)}</td>
-                    <td className="p-5 text-right">
+                    <td className="p-4 font-mono text-slate-300">{formatMonthYear(d.paymentDate)}</td>
+                    <td className="p-4 font-bold text-white">{d.ticker}</td>
+                    <td className="p-4">
+                      <span className={`text-xs px-2 py-1 rounded font-bold ${d.assetType === 'ACAO' ? 'bg-blue-500/10 text-blue-400' : d.assetType === 'FII' ? 'bg-amber-500/10 text-amber-400' : 'bg-purple-500/10 text-purple-400'}`}>
+                        {d.assetType}
+                      </span>
+                    </td>
+                    <td className="p-4 text-slate-400">{d.type}</td>
+                    <td className="p-4 text-right font-bold text-emerald-400 font-mono">{formatCurrency(d.totalValue)}</td>
+                    <td className="p-4 text-right">
                       <div className="flex gap-2 justify-end opacity-0 group-hover:opacity-100">
                         <button onClick={() => handleEdit(d)} className="text-slate-600 hover:text-blue-500 p-2"><Edit2 size={16} /></button>
-                        <button onClick={() => { if(confirm('Excluir?')) deleteItem('dividends', d.id!) }} className="text-slate-600 hover:text-rose-500 p-2"><Trash2 size={16} /></button>
+                        <button onClick={() => deleteItem('dividends', d.id!)} className="text-slate-600 hover:text-rose-500 p-2"><Trash2 size={16} /></button>
                       </div>
                     </td>
                   </tr>
                 ))}
-                {filteredAndSortedDividends.length === 0 && <tr><td colSpan={6} className="p-10 text-center text-slate-500">Nenhum dividendo encontrado.</td></tr>}
+                {filteredAndSortedDividends.length === 0 && (
+                  <tr><td colSpan={6} className="p-10 text-center text-slate-500">Nenhum dividendo encontrado com os filtros aplicados.</td></tr>
+                )}
               </tbody>
-              {filteredAndSortedDividends.length > 0 && (
-                <tfoot className="bg-slate-800/50 border-t-2 border-slate-700">
-                  <tr><td colSpan={4} className="p-5 text-right font-bold text-slate-300 uppercase text-xs">Total ({filteredAndSortedDividends.length}):</td><td className="p-5 text-right font-mono text-emerald-400 font-bold text-lg">{formatCurrency(totalFiltered)}</td><td></td></tr>
-                </tfoot>
-              )}
             </table>
           </div>
         </div>
       )}
 
-      <Modal isOpen={isOpen} onClose={() => { setIsOpen(false); setEditingDividend(null); }} title={editingDividend ? "Editar" : "Novo Dividendo"}>
+      {/* Modal */}
+      <Modal isOpen={isOpen} onClose={() => { setIsOpen(false); setEditingDividend(null); }} title={editingDividend ? "Editar Dividendo" : "Novo Dividendo"}>
         <form onSubmit={handleSubmit} className="space-y-4">
-          <Select label="Ativo" name="ticker" required defaultValue={editingDividend?.ticker}>
-            <option value="">Selecione...</option>
-            {assets.map(a => <option key={a.id} value={a.ticker}>{a.ticker} - {a.name}</option>)}
-          </Select>
-          <MonthYearPicker label="Mês/Ano" month={formMonth} year={formYear} onMonthChange={setFormMonth} onYearChange={setFormYear} />
+          <Input label="Ticker" name="ticker" placeholder="Ex: PETR4" required defaultValue={editingDividend?.ticker} />
           <Select label="Tipo" name="type" defaultValue={editingDividend?.type || 'DIVIDENDO'}>
-            <option value="DIVIDENDO">Dividendo</option><option value="JCP">JCP</option><option value="RENDIMENTO">Rendimento</option>
+            <option value="DIVIDENDO">Dividendo</option>
+            <option value="JCP">JCP</option>
+            <option value="RENDIMENTO">Rendimento</option>
           </Select>
-          <Input label="Valor (R$)" type="number" step="0.01" name="totalValue" required defaultValue={editingDividend?.totalValue} />
-          <Button type="submit" className="w-full">{editingDividend ? <><Save size={18} /> Atualizar</> : <><Plus size={18} /> Salvar</>}</Button>
-        </form>
-      </Modal>
-
-      <Modal isOpen={showImportModal} onClose={() => { setShowImportModal(false); setImportUrl(''); setImportResults(null); }} title="Importar do Google Sheets">
-        <div className="space-y-4">
-          <div className="bg-blue-500/10 border border-blue-500/20 rounded-xl p-4">
-            <p className="text-xs text-blue-300">Cole o link da planilha com colunas: Ticker, Mês/Ano, Valor</p>
-          </div>
-          <Input label="Link" placeholder="https://docs.google.com/spreadsheets/d/..." value={importUrl} onChange={(e) => setImportUrl(e.target.value)} />
-          <Button onClick={() => { setImportResults({ success: true, message: 'Funcionalidade em desenvolvimento' }); }} className="w-full" disabled={!importUrl || isImporting}>
-            {isImporting ? 'Processando...' : <><Upload size={18} /> Importar</>}
+          <MonthYearPicker label="Mês/Ano do Pagamento" month={formMonth} year={formYear} onMonthChange={setFormMonth} onYearChange={setFormYear} />
+          <Input label="Valor Total (R$)" name="totalValue" type="number" step="0.01" placeholder="Ex: 150.00" required defaultValue={editingDividend?.totalValue} />
+          <Button type="submit" className="w-full">
+            {editingDividend ? <><Save size={18} /> Atualizar</> : <><Plus size={18} /> Adicionar</>}
           </Button>
-          {importResults && <div className={`p-4 rounded-xl ${importResults.success ? 'bg-emerald-500/10 text-emerald-300' : 'bg-rose-500/10 text-rose-300'}`}>{importResults.message}</div>}
-        </div>
+        </form>
       </Modal>
     </div>
   );

@@ -1,11 +1,11 @@
 import React, { useState, useMemo } from 'react';
 import { useFinance } from '../context';
+import { usePrivacy } from '../contexts/PrivacyContext';
 import { Button, Modal, Input, Select } from '../components/ui';
 import { Plus, Trash2, ArrowUpDown, ArrowUp, ArrowDown, Edit2, Building2, CreditCard, TrendingUp, TrendingDown, Wallet } from 'lucide-react';
 
 type TransactionType = 'RECEITA' | 'DESPESA' | 'TRANSFERENCIA';
 
-// FIX #1 - Correção de timezone
 const parseLocalDate = (dateStr: string): Date => {
   if (!dateStr) return new Date();
   const [year, month, day] = dateStr.split('-').map(Number);
@@ -18,31 +18,24 @@ const formatDate = (dateStr: string): string => {
   return date.toLocaleDateString('pt-BR');
 };
 
-const formatCurrency = (val: number | null | undefined): string => {
-  // FIX #7 - Tratamento de valores nulos/undefined para evitar NaN
-  const safeVal = typeof val === 'number' && !isNaN(val) ? val : 0;
-  return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(safeVal);
-};
-
 export const CashFlow = () => {
   const { accounts, transactions, addAccount, addTransaction, deleteItem } = useFinance();
+  const { formatCurrency, isHidden } = usePrivacy();
+  
   const [showAccountModal, setShowAccountModal] = useState(false);
   const [showTransactionModal, setShowTransactionModal] = useState(false);
   const [filterAccount, setFilterAccount] = useState<string>('ALL');
   const [filterType, setFilterType] = useState<string>('ALL');
   const [filterMonth, setFilterMonth] = useState<string>('ALL');
 
-  // FIX #7 - Cálculo seguro do saldo das contas
   const accountsWithBalance = useMemo(() => {
     const balances: Record<string, number> = {};
     
-    // Inicializa com saldo inicial das contas (tratando undefined/null)
     accounts.forEach(acc => {
       const initialBalance = Number(acc.initial_balance || acc.initialBalance || 0);
       balances[acc.id!] = isNaN(initialBalance) ? 0 : initialBalance;
     });
     
-    // Soma transações
     transactions.forEach(t => {
       const value = Number(t.value || t.amount || 0);
       const safeValue = isNaN(value) ? 0 : value;
@@ -64,7 +57,6 @@ export const CashFlow = () => {
     }));
   }, [accounts, transactions]);
 
-  // FIX #7 - Saldo total seguro
   const totalBalance = useMemo(() => {
     return accountsWithBalance.reduce((sum, acc) => {
       const balance = Number(acc.balance);
@@ -72,7 +64,6 @@ export const CashFlow = () => {
     }, 0);
   }, [accountsWithBalance]);
 
-  // Transações filtradas
   const filteredTransactions = useMemo(() => {
     return transactions
       .filter(t => {
@@ -93,7 +84,6 @@ export const CashFlow = () => {
       });
   }, [transactions, filterAccount, filterType, filterMonth]);
 
-  // Meses disponíveis
   const availableMonths = useMemo(() => {
     const months = new Set<string>();
     transactions.forEach(t => {
@@ -105,7 +95,6 @@ export const CashFlow = () => {
     return Array.from(months).sort().reverse();
   }, [transactions]);
 
-  // Totais do período
   const periodTotals = useMemo(() => {
     let income = 0;
     let expense = 0;
@@ -191,7 +180,6 @@ export const CashFlow = () => {
 
       {/* Cards de Contas */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        {/* Card Saldo Total */}
         <div className="bg-gradient-to-br from-blue-600/20 to-blue-700/10 border border-blue-500/20 rounded-2xl p-6">
           <div className="flex items-center gap-3 mb-2">
             <div className="p-3 bg-blue-500/20 rounded-xl">
@@ -205,7 +193,6 @@ export const CashFlow = () => {
           <p className="text-xs text-slate-500">Todas as contas</p>
         </div>
 
-        {/* Cards das Contas */}
         {accountsWithBalance.slice(0, 3).map(acc => (
           <div key={acc.id} className="bg-slate-900/50 border border-slate-800 rounded-2xl p-6">
             <div className="flex items-center gap-3 mb-2">
@@ -304,7 +291,7 @@ export const CashFlow = () => {
       <div className="bg-slate-900/50 border border-slate-800 rounded-2xl overflow-hidden">
         <div className="p-4 border-b border-slate-800 flex justify-between items-center">
           <h3 className="font-bold text-white">Extrato Consolidado</h3>
-          <span className="text-sm text-slate-500">{filteredTransactions.length} registros</span>
+          <span className="text-sm text-slate-500">{isHidden ? '•••' : filteredTransactions.length} registros</span>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">

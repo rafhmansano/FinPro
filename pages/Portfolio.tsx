@@ -1,40 +1,16 @@
 import React, { useState, useMemo } from 'react';
 import { useFinance } from '../context';
+import { usePrivacy } from '../contexts/PrivacyContext';
 import { Button, Modal, Input, Select } from '../components/ui';
 import { Plus, Trash2, Edit2, Save, Briefcase, TrendingUp, TrendingDown, PieChart as PieIcon, RefreshCw, Clock } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts';
 
 const COLORS = { primary: '#3b82f6', secondary: '#64748b', success: '#10b981', warning: '#f59e0b', accent: '#6366f1', danger: '#ef4444' };
 
-const formatCurrency = (value: number, currency: string = 'BRL'): string => {
-  const safeVal = typeof value === 'number' && !isNaN(value) ? value : 0;
-  if (currency === 'USD') {
-    return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(safeVal);
-  }
-  return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(safeVal);
-};
-
-const formatPercent = (value: number): string => {
-  return `${value >= 0 ? '+' : ''}${value.toFixed(2)}%`;
-};
-
-const formatDate = (dateStr?: string): string => {
-  if (!dateStr) return '-';
-  try {
-    const date = new Date(dateStr);
-    return date.toLocaleString('pt-BR', { 
-      day: '2-digit', 
-      month: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
-  } catch {
-    return '-';
-  }
-};
-
 export const Portfolio = () => {
   const { portfolio, assets, updateQuotes, quotesLoading, addAsset, updateAsset, deleteItem } = useFinance();
+  const { formatCurrency, formatPercent, formatNumber, isHidden } = usePrivacy();
+  
   const [showAssetModal, setShowAssetModal] = useState(false);
   const [editingAsset, setEditingAsset] = useState<any>(null);
   const [filterType, setFilterType] = useState<string>('ALL');
@@ -45,13 +21,26 @@ export const Portfolio = () => {
     { code: 'USD', name: 'Dólar (US$)', symbol: '$' }
   ];
 
-  // Filtrar portfolio
+  const formatDate = (dateStr?: string): string => {
+    if (!dateStr) return '-';
+    try {
+      const date = new Date(dateStr);
+      return date.toLocaleString('pt-BR', { 
+        day: '2-digit', 
+        month: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    } catch {
+      return '-';
+    }
+  };
+
   const filteredPortfolio = useMemo(() => {
     if (filterType === 'ALL') return portfolio;
     return portfolio.filter(p => p.type === filterType);
   }, [portfolio, filterType]);
 
-  // Totais gerais
   const totals = useMemo(() => {
     const brl = portfolio.filter(p => p.currency === 'BRL' || !p.currency);
     const usd = portfolio.filter(p => p.currency === 'USD');
@@ -72,7 +61,6 @@ export const Portfolio = () => {
     };
   }, [portfolio]);
 
-  // Totais por tipo
   const totalsByType = useMemo(() => {
     const totals: Record<string, { marketValue: number; gainLoss: number; count: number }> = {
       ACAO: { marketValue: 0, gainLoss: 0, count: 0 },
@@ -92,15 +80,14 @@ export const Portfolio = () => {
     return totals;
   }, [portfolio]);
 
-  // Dados para gráfico de pizza
   const pieData = useMemo(() => {
     return [
-      { name: 'Ações', value: totalsByType.ACAO.marketValue, color: COLORS.primary },
-      { name: 'FIIs', value: totalsByType.FII.marketValue, color: COLORS.warning },
-      { name: 'ETFs', value: totalsByType.ETF.marketValue, color: COLORS.accent },
-      { name: 'Renda Fixa', value: totalsByType.RENDA_FIXA.marketValue, color: COLORS.success }
-    ].filter(d => d.value > 0);
-  }, [totalsByType]);
+      { name: 'Ações', value: isHidden ? 0 : totalsByType.ACAO.marketValue, color: COLORS.primary },
+      { name: 'FIIs', value: isHidden ? 0 : totalsByType.FII.marketValue, color: COLORS.warning },
+      { name: 'ETFs', value: isHidden ? 0 : totalsByType.ETF.marketValue, color: COLORS.accent },
+      { name: 'Renda Fixa', value: isHidden ? 0 : totalsByType.RENDA_FIXA.marketValue, color: COLORS.success }
+    ].filter(d => d.value > 0 || isHidden);
+  }, [totalsByType, isHidden]);
 
   const handleUpdateQuotes = async () => {
     const result = await updateQuotes();
@@ -230,20 +217,20 @@ export const Portfolio = () => {
             </div>
           </div>
           <p className={`text-sm ${totals.brl.gainLoss >= 0 ? 'text-green-400' : 'text-red-400'} font-mono`}>
-            {formatPercent(totals.brl.gainLossPercent)}
+            {formatPercent(totals.brl.gainLossPercent, true)}
           </p>
         </div>
 
         <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-6">
           <p className="text-xs text-slate-400 font-semibold uppercase">Posições Ativas</p>
-          <p className="text-3xl font-bold text-white">{portfolio.length}</p>
+          <p className="text-3xl font-bold text-white">{isHidden ? '•••' : portfolio.length}</p>
           <p className="text-xs text-slate-500 mt-2">
-            {totalsByType.ACAO.count} Ações • {totalsByType.FII.count} FIIs • {totalsByType.ETF.count} ETFs • {totalsByType.RENDA_FIXA.count} RF
+            {isHidden ? '••• Ações • ••• FIIs • ••• ETFs • ••• RF' : `${totalsByType.ACAO.count} Ações • ${totalsByType.FII.count} FIIs • ${totalsByType.ETF.count} ETFs • ${totalsByType.RENDA_FIXA.count} RF`}
           </p>
         </div>
       </div>
 
-      {/* Cards USD (se houver) */}
+      {/* Cards USD */}
       {totals.usd.marketValue > 0 && (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-6">
@@ -257,7 +244,7 @@ export const Portfolio = () => {
           <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-6">
             <p className={`text-xs ${totals.usd.gainLoss >= 0 ? 'text-green-400' : 'text-red-400'} font-semibold uppercase`}>Ganho/Perda (USD)</p>
             <p className={`text-xl font-bold ${totals.usd.gainLoss >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-              {formatCurrency(totals.usd.gainLoss, 'USD')} ({formatPercent(totals.usd.gainLossPercent)})
+              {formatCurrency(totals.usd.gainLoss, 'USD')} ({formatPercent(totals.usd.gainLossPercent, true)})
             </p>
           </div>
         </div>
@@ -299,7 +286,7 @@ export const Portfolio = () => {
                     cx="50%"
                     cy="50%"
                     outerRadius={100}
-                    label={({ name, percent }) => `${name} ${(percent * 100).toFixed(1)}%`}
+                    label={({ name, percent }) => isHidden ? name : `${name} ${(percent * 100).toFixed(1)}%`}
                   >
                     {pieData.map((entry, idx) => (
                       <Cell key={idx} fill={entry.color} />
@@ -324,7 +311,7 @@ export const Portfolio = () => {
           <div className="h-[300px] overflow-y-auto">
             {filteredPortfolio.length > 0 ? (
               <ResponsiveContainer width="100%" height={Math.max(300, filteredPortfolio.slice(0, 10).length * 35)}>
-                <BarChart data={filteredPortfolio.slice(0, 10)} layout="vertical" margin={{ left: 60 }}>
+                <BarChart data={filteredPortfolio.slice(0, 10).map(p => ({ ...p, marketValue: isHidden ? 0 : p.marketValue }))} layout="vertical" margin={{ left: 60 }}>
                   <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#1e293b" />
                   <XAxis type="number" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 11 }} />
                   <YAxis dataKey="ticker" type="category" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 11 }} width={55} />
@@ -379,7 +366,7 @@ export const Portfolio = () => {
                     </span>
                   </td>
                   <td className="p-4 text-right font-mono text-slate-300">
-                    {position.quantity.toLocaleString('pt-BR')}
+                    {formatNumber(position.quantity)}
                   </td>
                   <td className="p-4 text-right font-mono text-slate-300">
                     {formatCurrency(position.avgPrice, position.currency)}
@@ -397,7 +384,7 @@ export const Portfolio = () => {
                     {formatCurrency(position.gainLoss, position.currency)}
                   </td>
                   <td className={`p-4 text-right font-mono font-bold ${position.gainLossPercent >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                    {formatPercent(position.gainLossPercent)}
+                    {formatPercent(position.gainLossPercent, true)}
                   </td>
                   <td className="p-4 text-right">
                     <div className="flex gap-2 justify-end opacity-0 group-hover:opacity-100">
@@ -420,66 +407,29 @@ export const Portfolio = () => {
         </div>
       </div>
 
-      {/* Modal de Ativo */}
+      {/* Modal */}
       <Modal
         isOpen={showAssetModal}
         onClose={() => { setShowAssetModal(false); setEditingAsset(null); }}
         title={editingAsset ? "Editar Ativo" : "Novo Ativo"}
       >
         <form onSubmit={handleSubmit} className="space-y-4">
-          <Input
-            label="Ticker"
-            name="ticker"
-            placeholder="Ex: PETR4"
-            required
-            defaultValue={editingAsset?.ticker}
-          />
-          <Input
-            label="Nome"
-            name="name"
-            placeholder="Ex: Petrobras"
-            required
-            defaultValue={editingAsset?.name}
-          />
+          <Input label="Ticker" name="ticker" placeholder="Ex: PETR4" required defaultValue={editingAsset?.ticker} />
+          <Input label="Nome" name="name" placeholder="Ex: Petrobras" required defaultValue={editingAsset?.name} />
           <Select label="Tipo" name="type" defaultValue={editingAsset?.type || 'ACAO'}>
             <option value="ACAO">Ação</option>
             <option value="FII">FII</option>
             <option value="ETF">ETF</option>
             <option value="RENDA_FIXA">Renda Fixa</option>
           </Select>
-
           <Select label="Moeda" name="currency" defaultValue={editingAsset?.currency || 'BRL'}>
-            {currencies.map(c => (
-              <option key={c.code} value={c.code}>{c.name}</option>
-            ))}
+            {currencies.map(c => (<option key={c.code} value={c.code}>{c.name}</option>))}
           </Select>
-
-          <Input
-            label="Setor"
-            name="sector"
-            placeholder="Ex: Energia"
-            defaultValue={editingAsset?.sector}
-          />
-
+          <Input label="Setor" name="sector" placeholder="Ex: Energia" defaultValue={editingAsset?.sector} />
           <div className="grid grid-cols-2 gap-4">
-            <Input
-              label="Quantidade"
-              name="quantity"
-              type="number"
-              step="1"
-              placeholder="Ex: 100"
-              defaultValue={editingAsset?.quantity || ''}
-            />
-            <Input
-              label="Preço Médio"
-              name="avgPrice"
-              type="number"
-              step="0.01"
-              placeholder="Ex: 25.50"
-              defaultValue={editingAsset?.avg_price || editingAsset?.avgPrice || ''}
-            />
+            <Input label="Quantidade" name="quantity" type="number" step="1" placeholder="Ex: 100" defaultValue={editingAsset?.quantity || ''} />
+            <Input label="Preço Médio" name="avgPrice" type="number" step="0.01" placeholder="Ex: 25.50" defaultValue={editingAsset?.avg_price || editingAsset?.avgPrice || ''} />
           </div>
-
           <Button type="submit" className="w-full">
             {editingAsset ? <><Save size={18} /> Atualizar</> : <><Plus size={18} /> Cadastrar</>}
           </Button>
