@@ -1,5 +1,8 @@
 import React, { useState } from 'react';
 import { FinanceProvider, useFinance } from './context';
+import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { PrivacyProvider } from './contexts/PrivacyContext';
+import { ProtectedRoute } from './components/ProtectedRoute';
 import { Layout } from './components/layout';
 import { Dashboard } from './pages/Dashboard';
 import { CashFlow } from './pages/CashFlow';
@@ -33,8 +36,14 @@ const AppContent = () => {
 
 export default function App() {
   return (
-    <FinanceProvider>
-      <AppContent />
-    </FinanceProvider>
+    <AuthProvider>
+      <PrivacyProvider>
+        <ProtectedRoute>
+          <FinanceProvider>
+            <AppContent />
+          </FinanceProvider>
+        </ProtectedRoute>
+      </PrivacyProvider>
+    </AuthProvider>
   );
 }
