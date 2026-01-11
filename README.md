@@ -1,228 +1,158 @@
-# 🔐 Guia de Integração - FinPro
+# Deploy da Edge Function - Passo a Passo
 
-Este guia explica como integrar as funcionalidades de **modo de privacidade** e **autenticação** no seu projeto FinPro.
+## Método: Via Dashboard do Supabase (Sem CLI)
+
+### Passo 1: Configurar o Secret da API Key
+
+1. Acesse o Dashboard do Supabase: https://supabase.com/dashboard
+2. Selecione seu projeto (vdxrrqknfgwfajfxncei)
+3. Vá em **Project Settings** (ícone de engrenagem)
+4. Clique em **Edge Functions**
+5. Clique em **Manage Secrets**
+6. Clique em **New Secret**
+7. Configure:
+   - Name: `ANTHROPIC_API_KEY`
+   - Value: `sk-ant-api03-sua-key-aqui` (cole sua API key da Anthropic)
+8. Clique em **Save**
+
+### Passo 2: Criar a Edge Function
+
+Infelizmente, o Dashboard não permite criar Edge Functions diretamente.
+Você precisa usar uma dessas opções:
 
 ---
 
-## 📁 Arquivos Criados
+## Opção A: GitHub Actions (Recomendado)
+
+### 1. Adicione os arquivos ao seu repositório:
 
 ```
-finpro-integration/
-├── contexts/
-│   ├── AuthContext.tsx       # Autenticação com Supabase
-│   └── PrivacyContext.tsx    # Controle de visibilidade
-├── components/
-│   ├── layout.tsx            # Layout atualizado (substitui o atual)
-│   ├── PrivacyToggle.tsx     # Botão de privacidade
-│   └── ProtectedRoute.tsx    # Proteção de rotas
-├── pages/
-│   └── LoginPage.tsx         # Tela de login
-├── App.tsx                   # App.tsx atualizado
-└── EXEMPLO_USO_PRIVACY.ts    # Documentação de uso
+FinPro/
+└── supabase/
+    └── functions/
+        └── extract-financial-data/
+            └── index.ts   (copie o arquivo fornecido)
 ```
+
+### 2. Crie o arquivo de workflow `.github/workflows/deploy-functions.yml`:
+
+```yaml
+name: Deploy Edge Functions
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'supabase/functions/**'
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+      
+      - run: supabase functions deploy extract-financial-data --project-ref ${{ secrets.SUPABASE_PROJECT_REF }}
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+```
+
+### 3. Configure os Secrets no GitHub:
+
+1. Vá no seu repositório GitHub → Settings → Secrets and variables → Actions
+2. Adicione:
+   - `SUPABASE_PROJECT_REF`: `vdxrrqknfgwfajfxncei`
+   - `SUPABASE_ACCESS_TOKEN`: (obtenha em https://supabase.com/dashboard/account/tokens)
+
+### 4. Faça push das alterações
+
+O deploy será automático!
 
 ---
 
-## 🚀 Passo a Passo
+## Opção B: Deploy Manual Local (Uma vez só)
 
-### 1. Copie os arquivos para seu projeto
+Se quiser fazer o deploy uma única vez sem GitHub Actions:
+
+### 1. Instale o Docker Desktop
+https://www.docker.com/products/docker-desktop/
+
+### 2. Instale o Supabase CLI via Docker:
 
 ```bash
-# Crie a pasta contexts se não existir
-mkdir -p contexts
-
-# Copie os arquivos
-cp finpro-integration/contexts/* contexts/
-cp finpro-integration/components/* components/
-cp finpro-integration/pages/LoginPage.tsx pages/
-cp finpro-integration/App.tsx App.tsx
+# Não precisa instalar - rode direto via npx
+npx supabase --version
 ```
 
-### 2. Habilite o Supabase Auth
+### 3. Faça login e deploy:
 
-No dashboard do Supabase (https://supabase.com/dashboard):
+```bash
+# Login (abre o browser)
+npx supabase login
 
-1. Acesse seu projeto: `vdxrrqknfgwfajfxncei`
-2. Vá em **Authentication** → **Providers**
-3. Habilite **Email** provider
-4. Em **URL Configuration**, configure:
-   - Site URL: `https://rafhmansano.github.io/FinPro/`
-   - Redirect URLs: `https://rafhmansano.github.io/FinPro/`
+# Na pasta do FinPro
+cd FinPro
 
-### 3. Crie seu primeiro usuário
+# Link com o projeto
+npx supabase link --project-ref vdxrrqknfgwfajfxncei
 
-Opção A: Via Dashboard do Supabase
-- Vá em **Authentication** → **Users** → **Add user**
-
-Opção B: Via tela de cadastro do app
-- Acesse o app e clique em "Criar conta"
-
----
-
-## 🎨 Funcionalidades Incluídas
-
-### Modo de Privacidade
-- Botão no sidebar para alternar visibilidade
-- Valores substituídos por `•••••` quando oculto
-- Estado salvo no localStorage (persiste entre sessões)
-- Atalho de teclado: `Ctrl+H` (opcional, veja abaixo)
-
-### Autenticação
-- Login com email/senha
-- Cadastro de novos usuários
-- Recuperação de senha
-- Logout
-- Sessão persistente
-
----
-
-## 📝 Atualizando as Páginas para Usar Privacidade
-
-### Exemplo: Dashboard.tsx
-
-```tsx
-// ANTES
-const formatCurrency = (value: number) => {
-  return new Intl.NumberFormat('pt-BR', { 
-    style: 'currency', 
-    currency: 'BRL' 
-  }).format(value);
-};
-
-// DEPOIS
-import { usePrivacy } from '../contexts/PrivacyContext';
-
-export const Dashboard = () => {
-  const { formatCurrency, formatPercent, isHidden } = usePrivacy();
-  
-  // Agora use formatCurrency normalmente
-  // Os valores serão ocultados automaticamente quando necessário
-  return (
-    <div>
-      <p>{formatCurrency(patrimonio)}</p>
-      <p>{formatPercent(rentabilidade)}</p>
-    </div>
-  );
-};
-```
-
-### Exemplo: Portfolio.tsx
-
-```tsx
-import { usePrivacy } from '../contexts/PrivacyContext';
-
-export const Portfolio = () => {
-  const { formatCurrency, formatPercent, formatNumber, isHidden } = usePrivacy();
-  
-  return (
-    <table>
-      <tr>
-        <td>{position.ticker}</td>
-        <td>{formatNumber(position.quantity)}</td>
-        <td>{formatCurrency(position.avgPrice)}</td>
-        <td>{formatCurrency(position.marketValue)}</td>
-        <td className={position.gainLoss >= 0 ? 'text-green-400' : 'text-red-400'}>
-          {formatCurrency(position.gainLoss)}
-        </td>
-        <td>{formatPercent(position.gainLossPercent, true)}</td>
-      </tr>
-    </table>
-  );
-};
+# Deploy da função
+npx supabase functions deploy extract-financial-data
 ```
 
 ---
 
-## ⌨️ Atalho de Teclado (Opcional)
+## Opção C: Deploy via Supabase CLI no Cloud Shell
 
-Para adicionar `Ctrl+H` como atalho para alternar privacidade, adicione no `App.tsx`:
+Você pode usar o Google Cloud Shell (gratuito) para rodar o CLI:
 
-```tsx
-import { useEffect } from 'react';
-import { usePrivacy } from './contexts/PrivacyContext';
+1. Acesse: https://shell.cloud.google.com/
+2. Execute:
 
-// Dentro do AppContent
-const { togglePrivacy } = usePrivacy();
+```bash
+# Instalar Supabase CLI
+npm install -g supabase
 
-useEffect(() => {
-  const handleKeyDown = (e: KeyboardEvent) => {
-    if ((e.ctrlKey || e.metaKey) && e.key === 'h') {
-      e.preventDefault();
-      togglePrivacy();
-    }
-  };
-  
-  window.addEventListener('keydown', handleKeyDown);
-  return () => window.removeEventListener('keydown', handleKeyDown);
-}, [togglePrivacy]);
+# Login
+supabase login
+
+# Criar pasta e arquivo
+mkdir -p supabase/functions/extract-financial-data
+# Cole o conteúdo do index.ts
+
+# Link e deploy
+supabase link --project-ref vdxrrqknfgwfajfxncei
+supabase functions deploy extract-financial-data
 ```
 
 ---
 
-## 🔒 Row Level Security (RLS)
+## Verificar se Funcionou
 
-Para que cada usuário veja apenas seus próprios dados, atualize as policies no Supabase:
+1. No Dashboard do Supabase, vá em **Edge Functions**
+2. Você deve ver `extract-financial-data` listada
+3. Clique nela para ver logs e métricas
 
-```sql
--- Habilitar RLS em todas as tabelas
-ALTER TABLE assets ENABLE ROW LEVEL SECURITY;
-ALTER TABLE trades ENABLE ROW LEVEL SECURITY;
-ALTER TABLE dividends ENABLE ROW LEVEL SECURITY;
-ALTER TABLE transactions ENABLE ROW LEVEL SECURITY;
-ALTER TABLE accounts ENABLE ROW LEVEL SECURITY;
+---
 
--- Criar policy para cada tabela
-CREATE POLICY "Users can view own data" ON assets
-  FOR ALL USING (auth.uid() = user_id);
+## Testar a Função
 
-CREATE POLICY "Users can view own data" ON trades
-  FOR ALL USING (auth.uid() = user_id);
+No terminal ou via Postman:
 
-CREATE POLICY "Users can view own data" ON dividends
-  FOR ALL USING (auth.uid() = user_id);
-
-CREATE POLICY "Users can view own data" ON transactions
-  FOR ALL USING (auth.uid() = user_id);
-
-CREATE POLICY "Users can view own data" ON accounts
-  FOR ALL USING (auth.uid() = user_id);
+```bash
+curl -X POST https://vdxrrqknfgwfajfxncei.supabase.co/functions/v1/extract-financial-data \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer SEU_ANON_KEY" \
+  -d '{"fileContent": "Resultado 3T24 Receita: 50 bi", "assetType": "ACAO", "ticker": "PETR4", "fileType": "text"}'
 ```
 
-**Importante**: Suas tabelas precisam ter a coluna `user_id` para isso funcionar.
-
 ---
 
-## ✅ Checklist de Integração
+## Arquivos para Copiar
 
-- [ ] Copiar arquivos de contexts
-- [ ] Copiar componentes atualizados
-- [ ] Copiar LoginPage.tsx
-- [ ] Substituir App.tsx
-- [ ] Habilitar Email provider no Supabase
-- [ ] Configurar URLs no Supabase
-- [ ] Criar primeiro usuário
-- [ ] Testar login/logout
-- [ ] Testar modo de privacidade
-- [ ] Atualizar páginas para usar `usePrivacy`
-- [ ] (Opcional) Configurar RLS no banco
-
----
-
-## 🐛 Troubleshooting
-
-### "Invalid login credentials"
-→ Verifique se o email foi confirmado (se confirmação estiver habilitada)
-
-### Valores não estão sendo ocultados
-→ Certifique-se de usar `formatCurrency` do `usePrivacy` ao invés da função local
-
-### Erro ao fazer login
-→ Verifique se o Email provider está habilitado no Supabase
-
-### Loop infinito de loading
-→ Verifique se os providers estão na ordem correta no App.tsx:
-   `AuthProvider` → `PrivacyProvider` → `ProtectedRoute` → `FinanceProvider`
-
----
-
-**Desenvolvido para FinPro** 💰
+1. `supabase/functions/extract-financial-data/index.ts` → para seu repositório
+2. `services/valuationService.ts` → para `src/services/`

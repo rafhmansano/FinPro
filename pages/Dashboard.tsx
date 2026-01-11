@@ -332,75 +332,79 @@ export const Dashboard = () => {
 
       {activeTab === 'dividends' && (
         <>
-          {/* Cards de Resumo */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-            <div className="bg-gradient-to-br from-blue-600/20 to-blue-700/10 border border-blue-500/20 rounded-2xl p-6">
-              <div className="flex items-center gap-3 mb-2">
-                <div className="p-3 bg-blue-500/20 rounded-xl">
-                  <TrendingUp className="text-blue-400" size={24} />
+          {/* Cards de Resumo - Responsivo */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-6">
+            {/* Total Recebido */}
+            <div className="bg-gradient-to-br from-blue-600/20 to-blue-700/10 border border-blue-500/20 rounded-xl md:rounded-2xl p-3 md:p-6">
+              <div className="flex flex-col gap-2">
+                <div className="p-2 md:p-3 bg-blue-500/20 rounded-lg md:rounded-xl w-fit">
+                  <TrendingUp className="text-blue-400 w-4 h-4 md:w-6 md:h-6" />
                 </div>
-                <div>
-                  <p className="text-xs text-blue-300 font-semibold uppercase">Total Recebido</p>
-                  <p className="text-2xl font-bold text-white">{formatCurrency(totals.totalAll)}</p>
-                </div>
-              </div>
-            </div>
-
-            <div className="bg-gradient-to-br from-emerald-600/20 to-emerald-700/10 border border-emerald-500/20 rounded-2xl p-6">
-              <div className="flex items-center gap-3 mb-2">
-                <div className="p-3 bg-emerald-500/20 rounded-xl">
-                  <Calendar className="text-emerald-400" size={24} />
-                </div>
-                <div>
-                  <p className="text-xs text-emerald-300 font-semibold uppercase">Média Mensal {currentYear}</p>
-                  <p className="text-2xl font-bold text-white">{formatCurrency(totals.monthlyAvgCurrentYear)}</p>
+                <div className="min-w-0">
+                  <p className="text-[10px] md:text-xs text-blue-300 font-semibold uppercase">Total Recebido</p>
+                  <p className="text-base md:text-2xl font-bold text-white truncate">{formatCurrency(totals.totalAll)}</p>
                 </div>
               </div>
             </div>
 
-            <div className="bg-gradient-to-br from-amber-600/20 to-amber-700/10 border border-amber-500/20 rounded-2xl p-6">
-              <div className="flex items-center gap-3 mb-2">
-                <div className="p-3 bg-amber-500/20 rounded-xl">
-                  <Target className="text-amber-400" size={24} />
+            {/* Média Mensal */}
+            <div className="bg-gradient-to-br from-emerald-600/20 to-emerald-700/10 border border-emerald-500/20 rounded-xl md:rounded-2xl p-3 md:p-6">
+              <div className="flex flex-col gap-2">
+                <div className="p-2 md:p-3 bg-emerald-500/20 rounded-lg md:rounded-xl w-fit">
+                  <Calendar className="text-emerald-400 w-4 h-4 md:w-6 md:h-6" />
                 </div>
-                <div>
-                  <p className="text-xs text-amber-300 font-semibold uppercase">Meta {currentYear}</p>
-                  <p className="text-2xl font-bold text-white">{formatCurrency(totals.goal.yearly)}</p>
+                <div className="min-w-0">
+                  <p className="text-[10px] md:text-xs text-emerald-300 font-semibold uppercase">Média {currentYear}</p>
+                  <p className="text-base md:text-2xl font-bold text-white truncate">{formatCurrency(totals.monthlyAvgCurrentYear)}</p>
                 </div>
               </div>
             </div>
 
-            <div className="bg-gradient-to-br from-indigo-600/20 to-indigo-700/10 border border-indigo-500/20 rounded-2xl p-6">
-              <div className="flex items-center gap-3 mb-2">
-                <div className="p-3 bg-indigo-500/20 rounded-xl">
-                  <PieIcon className="text-indigo-400" size={24} />
+            {/* Meta Anual */}
+            <div className="bg-gradient-to-br from-amber-600/20 to-amber-700/10 border border-amber-500/20 rounded-xl md:rounded-2xl p-3 md:p-6">
+              <div className="flex flex-col gap-2">
+                <div className="p-2 md:p-3 bg-amber-500/20 rounded-lg md:rounded-xl w-fit">
+                  <Target className="text-amber-400 w-4 h-4 md:w-6 md:h-6" />
                 </div>
-                <div>
-                  <p className="text-xs text-indigo-300 font-semibold uppercase">Progresso Anual</p>
-                  <p className="text-2xl font-bold text-white">{isHidden ? '•••' : `${totals.progressYearly.toFixed(1)}%`}</p>
+                <div className="min-w-0">
+                  <p className="text-[10px] md:text-xs text-amber-300 font-semibold uppercase">Meta {currentYear}</p>
+                  <p className="text-base md:text-2xl font-bold text-white truncate">{formatCurrency(totals.goal.yearly)}</p>
                 </div>
               </div>
-              <div className="w-full bg-slate-800 rounded-full h-2 mt-2">
-                <div className="bg-indigo-500 h-2 rounded-full transition-all" style={{ width: isHidden ? '0%' : `${Math.min(totals.progressYearly, 100)}%` }} />
+            </div>
+
+            {/* Progresso */}
+            <div className="bg-gradient-to-br from-indigo-600/20 to-indigo-700/10 border border-indigo-500/20 rounded-xl md:rounded-2xl p-3 md:p-6">
+              <div className="flex flex-col gap-2">
+                <div className="p-2 md:p-3 bg-indigo-500/20 rounded-lg md:rounded-xl w-fit">
+                  <PieIcon className="text-indigo-400 w-4 h-4 md:w-6 md:h-6" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-[10px] md:text-xs text-indigo-300 font-semibold uppercase">Progresso</p>
+                  <p className="text-base md:text-2xl font-bold text-white truncate">{isHidden ? '•••' : `${totals.progressYearly.toFixed(1)}%`}</p>
+                </div>
+              </div>
+              <div className="w-full bg-slate-800 rounded-full h-1.5 md:h-2 mt-2">
+                <div className="bg-indigo-500 h-1.5 md:h-2 rounded-full transition-all" style={{ width: isHidden ? '0%' : `${Math.min(totals.progressYearly, 100)}%` }} />
               </div>
             </div>
           </div>
 
-          {/* Gráficos */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-            <div className="bg-slate-900/50 border border-slate-800 p-6 rounded-2xl">
-              <h3 className="text-lg font-bold text-white mb-6 flex items-center gap-2">
-                <BarChart2 size={20} className="text-blue-400" />
-                Dividendo Mensal Real vs. Meta (12 meses)
+          {/* Gráficos - Responsivo */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-8">
+            <div className="bg-slate-900/50 border border-slate-800 p-4 md:p-6 rounded-xl md:rounded-2xl">
+              <h3 className="text-sm md:text-lg font-bold text-white mb-4 md:mb-6 flex items-center gap-2">
+                <BarChart2 size={18} className="text-blue-400" />
+                <span className="truncate">Real vs. Meta (12 meses)</span>
               </h3>
-              <div className="h-[300px]">
+              <div className="h-[250px] md:h-[300px]">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={monthlyRealVsGoalData} barGap={2}>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#1e293b" />
-                    <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 11 }} />
-                    <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 11 }} />
+                    <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 10 }} interval={0} angle={-45} textAnchor="end" height={50} />
+                    <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 10 }} width={50} />
                     <Tooltip content={<CustomTooltip />} />
-                    <Legend wrapperStyle={{ paddingTop: '20px' }} />
+                    <Legend wrapperStyle={{ paddingTop: '10px', fontSize: '11px' }} />
                     <Bar dataKey="real" name="Recebido" fill={COLORS.primary} radius={[4, 4, 0, 0]} />
                     <Bar dataKey="meta" name="Meta" fill={COLORS.secondary} radius={[4, 4, 0, 0]} />
                   </BarChart>
@@ -408,41 +412,41 @@ export const Dashboard = () => {
               </div>
             </div>
 
-            <div className="bg-slate-900/50 border border-slate-800 p-6 rounded-2xl">
-              <h3 className="text-lg font-bold text-white mb-6 flex items-center gap-2">
-                <TrendingUp size={20} className="text-emerald-400" />
-                Crescimento Anual dos Dividendos (2020+)
+            <div className="bg-slate-900/50 border border-slate-800 p-4 md:p-6 rounded-xl md:rounded-2xl">
+              <h3 className="text-sm md:text-lg font-bold text-white mb-4 md:mb-6 flex items-center gap-2">
+                <TrendingUp size={18} className="text-emerald-400" />
+                <span className="truncate">Crescimento Anual (2020+)</span>
               </h3>
-              <div className="h-[300px]">
+              <div className="h-[250px] md:h-[300px]">
                 <ResponsiveContainer width="100%" height="100%">
                   <ComposedChart data={yearlyGrowthData}>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#1e293b" />
-                    <XAxis dataKey="year" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 11 }} />
-                    <YAxis yAxisId="left" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 11 }} />
-                    <YAxis yAxisId="right" orientation="right" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 11 }} tickFormatter={(v) => `${v}%`} />
+                    <XAxis dataKey="year" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 10 }} />
+                    <YAxis yAxisId="left" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 10 }} width={50} />
+                    <YAxis yAxisId="right" orientation="right" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 10 }} tickFormatter={(v) => `${v}%`} width={40} />
                     <Tooltip content={<CustomTooltip />} />
-                    <Legend wrapperStyle={{ paddingTop: '20px' }} />
+                    <Legend wrapperStyle={{ paddingTop: '10px', fontSize: '11px' }} />
                     <Bar yAxisId="left" dataKey="value" name="Recebido" fill={COLORS.primary} radius={[4, 4, 0, 0]} />
                     <Bar yAxisId="left" dataKey="meta" name="Meta" fill={COLORS.secondary} radius={[4, 4, 0, 0]} />
-                    <Line yAxisId="right" type="monotone" dataKey="growth" name="Crescimento %" stroke={COLORS.success} strokeWidth={3} dot={{ r: 5, fill: COLORS.success }} connectNulls />
+                    <Line yAxisId="right" type="monotone" dataKey="growth" name="Crescimento %" stroke={COLORS.success} strokeWidth={2} dot={{ r: 4, fill: COLORS.success }} connectNulls />
                   </ComposedChart>
                 </ResponsiveContainer>
               </div>
             </div>
 
-            <div className="lg:col-span-2 bg-slate-900/50 border border-slate-800 p-6 rounded-2xl">
-              <h3 className="text-lg font-bold text-white mb-6 flex items-center gap-2">
-                <Calendar size={20} className="text-amber-400" />
-                Distribuição Mensal por Ativo (Últimos 12 meses)
+            <div className="lg:col-span-2 bg-slate-900/50 border border-slate-800 p-4 md:p-6 rounded-xl md:rounded-2xl">
+              <h3 className="text-sm md:text-lg font-bold text-white mb-4 md:mb-6 flex items-center gap-2">
+                <Calendar size={18} className="text-amber-400" />
+                <span className="truncate">Distribuição Mensal por Ativo (Últimos 12 meses)</span>
               </h3>
-              <div className="h-[400px]">
+              <div className="h-[300px] md:h-[400px]">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={monthlyByAssetData}>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#1e293b" />
-                    <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 11 }} />
-                    <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 11 }} />
+                    <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 10 }} interval={0} angle={-45} textAnchor="end" height={50} />
+                    <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 10 }} width={50} />
                     <Tooltip content={<CustomTooltip />} />
-                    <Legend wrapperStyle={{ paddingTop: '20px', fontSize: '11px' }} />
+                    <Legend wrapperStyle={{ paddingTop: '10px', fontSize: '10px' }} />
                     {stackedTickers.map((ticker, idx) => (
                       <Bar key={ticker} dataKey={ticker} stackId="a" fill={STACKED_COLORS[idx % STACKED_COLORS.length]} name={ticker} />
                     ))}
@@ -456,25 +460,27 @@ export const Dashboard = () => {
 
       {activeTab === 'portfolio' && (
         <>
-          <div className="bg-gradient-to-br from-blue-600/20 to-indigo-700/10 border border-blue-500/20 rounded-2xl p-6">
-            <div className="flex items-center gap-3">
-              <div className="p-4 bg-blue-500/20 rounded-xl">
-                <Wallet className="text-blue-400" size={32} />
+          {/* Card Principal Portfolio - Responsivo */}
+          <div className="bg-gradient-to-br from-blue-600/20 to-indigo-700/10 border border-blue-500/20 rounded-xl md:rounded-2xl p-4 md:p-6">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+              <div className="p-3 md:p-4 bg-blue-500/20 rounded-xl">
+                <Wallet className="text-blue-400 w-6 h-6 md:w-8 md:h-8" />
               </div>
-              <div>
-                <p className="text-sm text-blue-300 font-semibold uppercase">Valor Total da Carteira</p>
-                <p className="text-3xl font-bold text-white">{formatCurrency(portfolioData.totalValue)}</p>
+              <div className="min-w-0 w-full">
+                <p className="text-xs md:text-sm text-blue-300 font-semibold uppercase">Valor Total da Carteira</p>
+                <p className="text-xl md:text-3xl font-bold text-white truncate">{formatCurrency(portfolioData.totalValue)}</p>
               </div>
             </div>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-            <div className="bg-slate-900/50 border border-slate-800 p-6 rounded-2xl">
-              <h3 className="text-lg font-bold text-white mb-6 flex items-center gap-2">
-                <PieIcon size={20} className="text-blue-400" />
+          {/* Gráficos Portfolio - Responsivo */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-8">
+            <div className="bg-slate-900/50 border border-slate-800 p-4 md:p-6 rounded-xl md:rounded-2xl">
+              <h3 className="text-sm md:text-lg font-bold text-white mb-4 md:mb-6 flex items-center gap-2">
+                <PieIcon size={18} className="text-blue-400" />
                 Distribuição por Tipo
               </h3>
-              <div className="h-[300px]">
+              <div className="h-[250px] md:h-[300px]">
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
                     <Pie
@@ -483,8 +489,8 @@ export const Dashboard = () => {
                       nameKey="name"
                       cx="50%"
                       cy="50%"
-                      outerRadius={100}
-                      label={({ name, percent }) => isHidden ? name : `${name} ${(percent * 100).toFixed(1)}%`}
+                      outerRadius={80}
+                      label={({ name, percent }) => isHidden ? name : `${name} ${(percent * 100).toFixed(0)}%`}
                       labelLine={{ stroke: '#64748b' }}
                     >
                       {portfolioData.typeData.map((entry, idx) => (
@@ -497,17 +503,17 @@ export const Dashboard = () => {
               </div>
             </div>
 
-            <div className="bg-slate-900/50 border border-slate-800 p-6 rounded-2xl">
-              <h3 className="text-lg font-bold text-white mb-6 flex items-center gap-2">
-                <BarChart2 size={20} className="text-emerald-400" />
-                Todos os Ativos por Valor
+            <div className="bg-slate-900/50 border border-slate-800 p-4 md:p-6 rounded-xl md:rounded-2xl">
+              <h3 className="text-sm md:text-lg font-bold text-white mb-4 md:mb-6 flex items-center gap-2">
+                <BarChart2 size={18} className="text-emerald-400" />
+                <span className="truncate">Ativos por Valor</span>
               </h3>
-              <div className="h-[300px] overflow-y-auto">
-                <ResponsiveContainer width="100%" height={Math.max(300, portfolioData.assetData.length * 35)}>
-                  <BarChart data={portfolioData.assetData} layout="vertical" margin={{ left: 60 }}>
+              <div className="h-[250px] md:h-[300px] overflow-y-auto">
+                <ResponsiveContainer width="100%" height={Math.max(250, portfolioData.assetData.length * 30)}>
+                  <BarChart data={portfolioData.assetData} layout="vertical" margin={{ left: 50, right: 10 }}>
                     <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#1e293b" />
-                    <XAxis type="number" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 11 }} />
-                    <YAxis dataKey="ticker" type="category" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 11 }} width={55} />
+                    <XAxis type="number" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 10 }} />
+                    <YAxis dataKey="ticker" type="category" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 10 }} width={45} />
                     <Tooltip content={({ active, payload }) => {
                       if (!active || !payload?.length) return null;
                       const data = payload[0].payload;
@@ -524,17 +530,17 @@ export const Dashboard = () => {
               </div>
             </div>
 
-            <div className="lg:col-span-2 bg-slate-900/50 border border-slate-800 p-6 rounded-2xl">
-              <h3 className="text-lg font-bold text-white mb-6 flex items-center gap-2">
-                <TrendingUp size={20} className="text-amber-400" />
-                Todos os Ativos por Dividendos Recebidos
+            <div className="lg:col-span-2 bg-slate-900/50 border border-slate-800 p-4 md:p-6 rounded-xl md:rounded-2xl">
+              <h3 className="text-sm md:text-lg font-bold text-white mb-4 md:mb-6 flex items-center gap-2">
+                <TrendingUp size={18} className="text-amber-400" />
+                <span className="truncate">Ativos por Dividendos Recebidos</span>
               </h3>
-              <div className="h-[400px] overflow-y-auto">
-                <ResponsiveContainer width="100%" height={Math.max(400, dividendsByAsset.length * 30)}>
-                  <BarChart data={dividendsByAsset} layout="vertical" margin={{ left: 60 }}>
+              <div className="h-[300px] md:h-[400px] overflow-y-auto">
+                <ResponsiveContainer width="100%" height={Math.max(300, dividendsByAsset.length * 28)}>
+                  <BarChart data={dividendsByAsset} layout="vertical" margin={{ left: 50, right: 10 }}>
                     <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#1e293b" />
-                    <XAxis type="number" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 11 }} />
-                    <YAxis dataKey="ticker" type="category" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 11 }} width={55} />
+                    <XAxis type="number" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 10 }} />
+                    <YAxis dataKey="ticker" type="category" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 10 }} width={45} />
                     <Tooltip content={<CustomTooltip />} />
                     <Bar dataKey="value" name="Dividendos" fill={COLORS.success} radius={[0, 4, 4, 0]} />
                   </BarChart>
