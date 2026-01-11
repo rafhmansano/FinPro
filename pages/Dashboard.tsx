@@ -57,17 +57,34 @@ export const Dashboard = () => {
   const currentYear = new Date().getFullYear();
   const currentMonth = new Date().getMonth();
 
-  // Tooltip customizado com privacidade
+  // Tooltip customizado com privacidade - filtra valores zerados
   const CustomTooltip = ({ active, payload, label }: any) => {
     if (!active || !payload?.length) return null;
+    
+    // Filtra apenas entradas com valor > 0
+    const filteredPayload = payload.filter((entry: any) => entry.value > 0);
+    
+    if (filteredPayload.length === 0) return null;
+    
+    // Ordena por valor decrescente
+    const sortedPayload = [...filteredPayload].sort((a: any, b: any) => b.value - a.value);
+    
+    // Calcula o total do mês
+    const total = sortedPayload.reduce((sum: number, entry: any) => sum + entry.value, 0);
+    
     return (
-      <div className="bg-slate-900 border border-slate-700 rounded-xl p-3 shadow-xl">
+      <div className="bg-slate-900 border border-slate-700 rounded-xl p-3 shadow-xl max-h-[400px] overflow-y-auto">
         <p className="text-slate-400 text-xs mb-2 font-medium">{label}</p>
-        {payload.map((entry: any, idx: number) => (
+        {sortedPayload.map((entry: any, idx: number) => (
           <p key={idx} className="text-sm font-semibold" style={{ color: entry.color || entry.fill }}>
             {entry.name}: {formatCurrency(entry.value)}
           </p>
         ))}
+        {sortedPayload.length > 1 && (
+          <p className="text-sm font-bold text-white border-t border-slate-700 mt-2 pt-2">
+            Total: {formatCurrency(total)}
+          </p>
+        )}
       </div>
     );
   };
