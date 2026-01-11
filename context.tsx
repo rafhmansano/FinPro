@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
-import { supabase } from './supabaseClient';
+import { supabase } from './supabase';  // Corrigido: arquivo é supabase.ts na raiz
 import { useAuth } from './contexts/AuthContext';
 
 // Types
