@@ -1,5 +1,5 @@
-// services/valuationService.ts
-// Serviço para extração de dados via Edge Function (seguro)
+// src/services/valuationService.ts
+// Serviço para extração de dados via Supabase Edge Function
 
 import { supabase } from '../supabase';
 
@@ -60,7 +60,7 @@ export interface ExtractedData {
 }
 
 /**
- * Extrai dados financeiros de um arquivo usando Edge Function
+ * Extrai dados financeiros de um arquivo usando Supabase Edge Function
  */
 export async function extractFinancialData(
   file: File,
@@ -87,7 +87,10 @@ export async function extractFinancialData(
       fileType = 'text';
     }
     
-    // Chamar Edge Function
+    console.log('Chamando Edge Function extract-financial-data...');
+    console.log('Tipo:', assetType, 'Ticker:', ticker, 'FileType:', fileType);
+    
+    // Chamar Edge Function do Supabase
     const { data, error } = await supabase.functions.invoke('extract-financial-data', {
       body: {
         fileContent,
@@ -99,23 +102,34 @@ export async function extractFinancialData(
     
     if (error) {
       console.error('Erro na Edge Function:', error);
-      return { success: false, error: error.message };
+      return { 
+        success: false, 
+        error: `Erro na extração: ${error.message}. Verifique se a Edge Function foi deployada.` 
+      };
     }
     
+    console.log('Resposta da Edge Function:', data);
+    
     if (!data?.success) {
-      return { success: false, error: data?.error || 'Erro desconhecido na extração' };
+      return { 
+        success: false, 
+        error: data?.error || 'Erro desconhecido na extração' 
+      };
     }
     
     return { success: true, data: data.data };
     
   } catch (error: any) {
     console.error('Erro na extração:', error);
-    return { success: false, error: error.message || 'Erro ao processar arquivo' };
+    return { 
+      success: false, 
+      error: error.message || 'Erro ao processar arquivo' 
+    };
   }
 }
 
 /**
- * Salva os dados extraídos no banco
+ * Salva os dados extraídos no banco de dados
  */
 export async function saveQuarterlyResult(
   userId: string,
@@ -128,52 +142,54 @@ export async function saveQuarterlyResult(
       asset_type: data.assetType,
       year: data.year,
       quarter: data.quarter,
-      report_date: data.reportDate,
-      shares: data.shares,
-      equity: data.equity,
-      dividends_paid: data.dividendsPaid,
+      report_date: data.reportDate || null,
+      shares: data.shares || null,
+      equity: data.equity || null,
+      dividends_paid: data.dividendsPaid || null,
       raw_extracted_data: data,
-      extraction_confidence: data.confidence,
+      extraction_confidence: data.confidence || 0,
       user_verified: false
     };
     
     // Campos de ações
     if (data.assetType === 'ACAO') {
-      record.revenue = data.revenue;
-      record.gross_profit = data.grossProfit;
-      record.ebitda = data.ebitda;
-      record.ebit = data.ebit;
-      record.net_income = data.netIncome;
-      record.net_debt = data.netDebt;
-      record.cash = data.cash;
-      record.capex = data.capex;
-      record.free_cash_flow = data.freeCashFlow;
+      record.revenue = data.revenue || null;
+      record.gross_profit = data.grossProfit || null;
+      record.ebitda = data.ebitda || null;
+      record.ebit = data.ebit || null;
+      record.net_income = data.netIncome || null;
+      record.net_debt = data.netDebt || null;
+      record.cash = data.cash || null;
+      record.capex = data.capex || null;
+      record.free_cash_flow = data.freeCashFlow || null;
     }
     
     // Campos de FIIs
     if (data.assetType === 'FII') {
-      record.fii_segment = data.fiiSegment;
-      record.nav = data.nav;
-      record.nav_per_share = data.navPerShare;
-      record.total_revenue = data.totalRevenue;
-      record.net_result = data.netResult;
-      record.ffo = data.ffo;
-      record.num_properties = data.numProperties;
-      record.total_area = data.totalArea;
-      record.vacancy_rate = data.vacancyRate;
-      record.avg_rent_per_sqm = data.avgRentPerSqm;
-      record.cap_rate = data.capRate;
-      record.num_cris = data.numCris;
-      record.portfolio_value = data.portfolioValue;
-      record.avg_duration = data.avgDuration;
-      record.avg_yield = data.avgYield;
-      record.ipca_exposure = data.ipcaExposure;
-      record.cdi_exposure = data.cdiExposure;
-      record.default_rate = data.defaultRate;
-      record.sales_per_sqm = data.salesPerSqm;
-      record.same_store_sales = data.sameStoreSales;
-      record.noi = data.noi;
+      record.fii_segment = data.fiiSegment || null;
+      record.nav = data.nav || null;
+      record.nav_per_share = data.navPerShare || null;
+      record.total_revenue = data.totalRevenue || null;
+      record.net_result = data.netResult || null;
+      record.ffo = data.ffo || null;
+      record.num_properties = data.numProperties || null;
+      record.total_area = data.totalArea || null;
+      record.vacancy_rate = data.vacancyRate || null;
+      record.avg_rent_per_sqm = data.avgRentPerSqm || null;
+      record.cap_rate = data.capRate || null;
+      record.num_cris = data.numCris || null;
+      record.portfolio_value = data.portfolioValue || null;
+      record.avg_duration = data.avgDuration || null;
+      record.avg_yield = data.avgYield || null;
+      record.ipca_exposure = data.ipcaExposure || null;
+      record.cdi_exposure = data.cdiExposure || null;
+      record.default_rate = data.defaultRate || null;
+      record.sales_per_sqm = data.salesPerSqm || null;
+      record.same_store_sales = data.sameStoreSales || null;
+      record.noi = data.noi || null;
     }
+    
+    console.log('Salvando resultado trimestral:', record);
     
     const { data: result, error } = await supabase
       .from('quarterly_results')
@@ -185,10 +201,11 @@ export async function saveQuarterlyResult(
       .single();
     
     if (error) {
-      console.error('Erro ao salvar:', error);
+      console.error('Erro ao salvar no banco:', error);
       return { success: false, error: error.message };
     }
     
+    console.log('Salvo com sucesso, ID:', result?.id);
     return { success: true, id: result?.id };
     
   } catch (error: any) {
@@ -198,27 +215,93 @@ export async function saveQuarterlyResult(
 }
 
 /**
- * Recalcula indicadores para um ativo
+ * Recalcula indicadores para um ativo específico
  */
 export async function recalculateIndicators(
   userId: string,
   ticker: string
 ): Promise<{ success: boolean; error?: string }> {
   try {
+    console.log('Recalculando indicadores para:', ticker);
+    
     const { error } = await supabase.rpc('calculate_asset_indicators', {
       p_user_id: userId,
       p_ticker: ticker
     });
     
     if (error) {
-      console.error('Erro ao recalcular:', error);
+      console.error('Erro ao recalcular indicadores:', error);
       return { success: false, error: error.message };
     }
     
+    console.log('Indicadores recalculados com sucesso');
     return { success: true };
     
   } catch (error: any) {
     console.error('Erro ao recalcular:', error);
     return { success: false, error: error.message };
+  }
+}
+
+/**
+ * Busca indicadores de ativos do usuário
+ */
+export async function getAssetIndicators(
+  userId: string,
+  ticker?: string
+): Promise<any[]> {
+  try {
+    let query = supabase
+      .from('asset_indicators')
+      .select('*')
+      .eq('user_id', userId);
+    
+    if (ticker) {
+      query = query.eq('ticker', ticker);
+    }
+    
+    const { data, error } = await query.order('ticker');
+    
+    if (error) {
+      console.error('Erro ao buscar indicadores:', error);
+      return [];
+    }
+    
+    return data || [];
+    
+  } catch (error) {
+    console.error('Erro ao buscar indicadores:', error);
+    return [];
+  }
+}
+
+/**
+ * Busca histórico trimestral de um ativo
+ */
+export async function getQuarterlyHistory(
+  userId: string,
+  ticker: string,
+  limit: number = 8
+): Promise<any[]> {
+  try {
+    const { data, error } = await supabase
+      .from('quarterly_results')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('ticker', ticker)
+      .order('year', { ascending: false })
+      .order('quarter', { ascending: false })
+      .limit(limit);
+    
+    if (error) {
+      console.error('Erro ao buscar histórico:', error);
+      return [];
+    }
+    
+    return data || [];
+    
+  } catch (error) {
+    console.error('Erro ao buscar histórico:', error);
+    return [];
   }
 }

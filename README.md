@@ -1,158 +1,127 @@
-# Deploy da Edge Function - Passo a Passo
+# FinPro Valuation - Pacote Corrigido
 
-## Método: Via Dashboard do Supabase (Sem CLI)
+## 📋 Checklist de Verificação
 
-### Passo 1: Configurar o Secret da API Key
+Antes de testar, verifique se todos estes itens estão configurados:
 
-1. Acesse o Dashboard do Supabase: https://supabase.com/dashboard
-2. Selecione seu projeto (vdxrrqknfgwfajfxncei)
-3. Vá em **Project Settings** (ícone de engrenagem)
-4. Clique em **Edge Functions**
-5. Clique em **Manage Secrets**
-6. Clique em **New Secret**
-7. Configure:
-   - Name: `ANTHROPIC_API_KEY`
-   - Value: `sk-ant-api03-sua-key-aqui` (cole sua API key da Anthropic)
-8. Clique em **Save**
+### ✅ 1. Tabelas no Supabase
+Verifique se existem executando no SQL Editor:
+```sql
+SELECT table_name FROM information_schema.tables 
+WHERE table_schema = 'public' 
+AND table_name IN ('quarterly_results', 'asset_indicators');
+```
 
-### Passo 2: Criar a Edge Function
+Se não existirem, execute o script SQL de criação das tabelas.
 
-Infelizmente, o Dashboard não permite criar Edge Functions diretamente.
-Você precisa usar uma dessas opções:
+### ✅ 2. Secret da API Key no Supabase
+1. Dashboard Supabase → Project Settings → Edge Functions → Manage Secrets
+2. Deve existir: `ANTHROPIC_API_KEY` com valor `sk-ant-...`
+
+### ✅ 3. Edge Function Deployada
+1. Dashboard Supabase → Edge Functions
+2. Deve existir: `extract-financial-data`
+
+Se não existir, você precisa fazer o deploy via:
+- GitHub Actions (recomendado)
+- Supabase CLI
+
+### ✅ 4. Secrets no GitHub (para deploy automático)
+Repository Settings → Secrets → Actions:
+- `SUPABASE_PROJECT_REF`: vdxrrqknfgwfajfxncei
+- `SUPABASE_ACCESS_TOKEN`: (obter em supabase.com/dashboard/account/tokens)
 
 ---
 
-## Opção A: GitHub Actions (Recomendado)
-
-### 1. Adicione os arquivos ao seu repositório:
+## 📦 Arquivos deste Pacote
 
 ```
-FinPro/
-└── supabase/
-    └── functions/
-        └── extract-financial-data/
-            └── index.ts   (copie o arquivo fornecido)
+finpro-valuation-fixed/
+├── services/
+│   └── valuationService.ts      → Copiar para src/services/
+├── supabase/
+│   └── functions/
+│       └── extract-financial-data/
+│           └── index.ts         → Adicionar ao repositório
+├── .github/
+│   └── workflows/
+│       └── deploy-functions.yml → Adicionar ao repositório
+└── README.md
 ```
 
-### 2. Crie o arquivo de workflow `.github/workflows/deploy-functions.yml`:
+---
 
-```yaml
-name: Deploy Edge Functions
+## 🚀 Passos para Funcionar
 
-on:
-  push:
-    branches: [main]
-    paths:
-      - 'supabase/functions/**'
-  workflow_dispatch:
+### Passo 1: Substituir o Serviço
+Copie `services/valuationService.ts` para `src/services/` no seu projeto, substituindo o arquivo existente.
 
-jobs:
-  deploy:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      
-      - uses: supabase/setup-cli@v1
-        with:
-          version: latest
-      
-      - run: supabase functions deploy extract-financial-data --project-ref ${{ secrets.SUPABASE_PROJECT_REF }}
-        env:
-          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-```
+### Passo 2: Adicionar Edge Function ao Repositório
+Copie a pasta `supabase/` para a raiz do seu projeto FinPro.
 
-### 3. Configure os Secrets no GitHub:
+### Passo 3: Adicionar Workflow do GitHub
+Copie a pasta `.github/` para a raiz do seu projeto FinPro.
 
-1. Vá no seu repositório GitHub → Settings → Secrets and variables → Actions
+### Passo 4: Configurar Secrets no GitHub
+1. Vá em: github.com/rafhmansano/FinPro/settings/secrets/actions
 2. Adicione:
-   - `SUPABASE_PROJECT_REF`: `vdxrrqknfgwfajfxncei`
-   - `SUPABASE_ACCESS_TOKEN`: (obtenha em https://supabase.com/dashboard/account/tokens)
+   - `SUPABASE_PROJECT_REF` = `vdxrrqknfgwfajfxncei`
+   - `SUPABASE_ACCESS_TOKEN` = (gere um novo token em supabase.com)
 
-### 4. Faça push das alterações
+### Passo 5: Configurar Secret no Supabase
+1. Vá em: supabase.com/dashboard/project/vdxrrqknfgwfajfxncei/settings/functions
+2. Manage Secrets → Add:
+   - `ANTHROPIC_API_KEY` = sua key da Anthropic
 
-O deploy será automático!
-
----
-
-## Opção B: Deploy Manual Local (Uma vez só)
-
-Se quiser fazer o deploy uma única vez sem GitHub Actions:
-
-### 1. Instale o Docker Desktop
-https://www.docker.com/products/docker-desktop/
-
-### 2. Instale o Supabase CLI via Docker:
-
+### Passo 6: Commit e Push
 ```bash
-# Não precisa instalar - rode direto via npx
-npx supabase --version
+git add .
+git commit -m "fix: add edge function for valuation"
+git push
 ```
 
-### 3. Faça login e deploy:
+O GitHub Actions vai deployar a Edge Function automaticamente.
 
-```bash
-# Login (abre o browser)
-npx supabase login
+### Passo 7: Verificar Deploy
+1. Aguarde o workflow terminar (veja em Actions no GitHub)
+2. No Supabase Dashboard → Edge Functions
+3. Deve aparecer `extract-financial-data`
 
-# Na pasta do FinPro
-cd FinPro
+### Passo 8: Testar
+1. Acesse o FinPro
+2. Vá em Valuation
+3. Clique em "Importar Resultado"
+4. Faça upload de um PDF de release trimestral
+5. Os dados devem ser extraídos automaticamente
 
-# Link com o projeto
-npx supabase link --project-ref vdxrrqknfgwfajfxncei
+---
 
-# Deploy da função
-npx supabase functions deploy extract-financial-data
+## 🐛 Troubleshooting
+
+### "Erro na extração: Edge Function não encontrada"
+- A função não foi deployada. Verifique o GitHub Actions.
+
+### "ANTHROPIC_API_KEY não configurada"
+- Adicione o secret no Supabase (passo 5)
+
+### "Erro 401 na API"
+- API key inválida. Gere uma nova em console.anthropic.com
+
+### Dados não aparecem após salvar
+- Verifique se as tabelas existem (passo 1 do checklist)
+- Verifique os logs no console do browser (F12)
+
+---
+
+## 🔍 Como Verificar se Está Funcionando
+
+Abra o Console do browser (F12) e você deve ver logs como:
+```
+Chamando Edge Function extract-financial-data...
+Tipo: ACAO Ticker: PETR4 FileType: pdf
+Resposta da Edge Function: {success: true, data: {...}}
+Salvando resultado trimestral: {...}
+Salvo com sucesso, ID: abc123...
 ```
 
----
-
-## Opção C: Deploy via Supabase CLI no Cloud Shell
-
-Você pode usar o Google Cloud Shell (gratuito) para rodar o CLI:
-
-1. Acesse: https://shell.cloud.google.com/
-2. Execute:
-
-```bash
-# Instalar Supabase CLI
-npm install -g supabase
-
-# Login
-supabase login
-
-# Criar pasta e arquivo
-mkdir -p supabase/functions/extract-financial-data
-# Cole o conteúdo do index.ts
-
-# Link e deploy
-supabase link --project-ref vdxrrqknfgwfajfxncei
-supabase functions deploy extract-financial-data
-```
-
----
-
-## Verificar se Funcionou
-
-1. No Dashboard do Supabase, vá em **Edge Functions**
-2. Você deve ver `extract-financial-data` listada
-3. Clique nela para ver logs e métricas
-
----
-
-## Testar a Função
-
-No terminal ou via Postman:
-
-```bash
-curl -X POST https://vdxrrqknfgwfajfxncei.supabase.co/functions/v1/extract-financial-data \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer SEU_ANON_KEY" \
-  -d '{"fileContent": "Resultado 3T24 Receita: 50 bi", "assetType": "ACAO", "ticker": "PETR4", "fileType": "text"}'
-```
-
----
-
-## Arquivos para Copiar
-
-1. `supabase/functions/extract-financial-data/index.ts` → para seu repositório
-2. `services/valuationService.ts` → para `src/services/`
+Se aparecer erro, o log vai mostrar exatamente onde está o problema.
