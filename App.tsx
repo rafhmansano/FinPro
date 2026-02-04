@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { FinanceProvider, useFinance } from './context';
 import { AuthProvider } from './contexts/AuthContext';
 import { PrivacyProvider } from './contexts/PrivacyContext';
@@ -10,10 +10,19 @@ import { Portfolio } from './pages/Portfolio';
 import { Dividends } from './pages/Dividends';
 import { Valuation } from './pages/Valuation';
 import { Settings } from './pages/Settings';
+import { ResetPassword } from './pages/ResetPassword';
 
 const AppContent: React.FC = () => {
   const { loading } = useFinance();
   const [currentPage, setCurrentPage] = useState('DASHBOARD');
+
+  // Verifica se está na página de reset de senha
+  useEffect(() => {
+    const hash = window.location.hash;
+    if (hash.includes('type=recovery')) {
+      setCurrentPage('RESET_PASSWORD');
+    }
+  }, []);
 
   if (loading) return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-slate-950 text-slate-400 gap-4">
@@ -21,6 +30,11 @@ const AppContent: React.FC = () => {
       <p className="font-mono text-xs tracking-widest">INICIALIZANDO SISTEMA...</p>
     </div>
   );
+
+  // Se estiver na página de reset, mostra ela sem o layout
+  if (currentPage === 'RESET_PASSWORD') {
+    return <ResetPassword />;
+  }
 
   return (
     <Layout currentPage={currentPage} onNavigate={setCurrentPage}>
@@ -35,14 +49,21 @@ const AppContent: React.FC = () => {
 };
 
 const App: React.FC = () => {
+  // Verifica se está na página de reset de senha
+  const isResetPage = window.location.hash.includes('type=recovery');
+
   return (
     <AuthProvider>
       <PrivacyProvider>
-        <ProtectedRoute>
-          <FinanceProvider>
-            <AppContent />
-          </FinanceProvider>
-        </ProtectedRoute>
+        {isResetPage ? (
+          <ResetPassword />
+        ) : (
+          <ProtectedRoute>
+            <FinanceProvider>
+              <AppContent />
+            </FinanceProvider>
+          </ProtectedRoute>
+        )}
       </PrivacyProvider>
     </AuthProvider>
   );
