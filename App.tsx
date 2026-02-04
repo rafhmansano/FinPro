@@ -16,25 +16,12 @@ const AppContent: React.FC = () => {
   const { loading } = useFinance();
   const [currentPage, setCurrentPage] = useState('DASHBOARD');
 
-  // Verifica se está na página de reset de senha
-  useEffect(() => {
-    const hash = window.location.hash;
-    if (hash.includes('type=recovery')) {
-      setCurrentPage('RESET_PASSWORD');
-    }
-  }, []);
-
   if (loading) return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-slate-950 text-slate-400 gap-4">
       <div className="w-10 h-10 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
       <p className="font-mono text-xs tracking-widest">INICIALIZANDO SISTEMA...</p>
     </div>
   );
-
-  // Se estiver na página de reset, mostra ela sem o layout
-  if (currentPage === 'RESET_PASSWORD') {
-    return <ResetPassword />;
-  }
 
   return (
     <Layout currentPage={currentPage} onNavigate={setCurrentPage}>
@@ -50,7 +37,21 @@ const AppContent: React.FC = () => {
 
 const App: React.FC = () => {
   // Verifica se está na página de reset de senha
-  const isResetPage = window.location.hash.includes('type=recovery');
+  const [isResetPage, setIsResetPage] = useState(false);
+
+  useEffect(() => {
+    const checkResetPage = () => {
+      const hash = window.location.hash;
+      setIsResetPage(hash.includes('type=recovery'));
+    };
+
+    checkResetPage();
+    window.addEventListener('hashchange', checkResetPage);
+
+    return () => {
+      window.removeEventListener('hashchange', checkResetPage);
+    };
+  }, []);
 
   return (
     <AuthProvider>
