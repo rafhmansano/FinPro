@@ -1,12 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { supabase } from '../supabase';
 import { Eye, EyeOff, Lock, CheckCircle, AlertCircle, PieChart, Loader2 } from 'lucide-react';
 
 export const ResetPassword: React.FC = () => {
-  const { user } = useAuth();
-  const navigate = useNavigate();
-  
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -54,9 +51,6 @@ export const ResetPassword: React.FC = () => {
     setLoading(true);
 
     try {
-      // Importa o supabase diretamente aqui para atualizar a senha
-      const { supabase } = await import('../supabase');
-      
       const { error: updateError } = await supabase.auth.updateUser({
         password: password
       });
@@ -65,15 +59,21 @@ export const ResetPassword: React.FC = () => {
 
       setSuccess(true);
       
-      // Redireciona para login após 3 segundos
+      // Limpa o hash e redireciona para login após 3 segundos
       setTimeout(() => {
-        navigate('/');
+        window.location.hash = '';
+        window.location.reload();
       }, 3000);
     } catch (error: any) {
       setError(error.message || 'Erro ao redefinir senha');
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleBackToLogin = () => {
+    window.location.hash = '';
+    window.location.reload();
   };
 
   // Tela de sucesso
@@ -210,8 +210,8 @@ export const ResetPassword: React.FC = () => {
           <div className="mt-6 text-center text-sm text-slate-400">
             <button
               type="button"
-              onClick={() => navigate('/')}
-              className="text-blue-400 hover:text-blue-300 font-medium"
+              onClick={handleBackToLogin}
+              className="text-blue-400 hover:text-blue-300 font-medium transition-colors"
             >
               ← Voltar ao login
             </button>
