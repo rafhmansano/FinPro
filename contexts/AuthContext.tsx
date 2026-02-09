@@ -62,10 +62,17 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   const resetPassword = async (email: string) => {
-    const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}/reset-password`,
-    });
-    return { error };
+// Detecta ambiente
+        const isProduction = window.location.hostname.includes('github.io');
+    
+        // URL correta incluindo /FinPro/
+        const redirectUrl = isProduction
+                ? 'https://rafhmansano.github.io/FinPro/'
+                : 'http://localhost:3000/';
+    
+        const { error } = await supabase.auth.resetPasswordForEmail(email, {
+                redirectTo: redirectUrl,
+        });return { error };
   };
 
   return (
